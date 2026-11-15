@@ -11,7 +11,8 @@
 3. Status per section: `not met` (error findings), `partial` (warn findings), else `not assessed`. A clean audit is
    never `met`: it lists which automated checks ran without findings, and a human or Claude finishes the assessment.
 4. With the ASVS release JSON installed, each in-scope section lists its requirements up to --level. Section findings
-   are shown as related evidence; every requirement starts as `not assessed`. Without the file: section level only.
+   are shown as related evidence. A requirement is `not met`/`partial` only from findings mapped to it exactly
+   (controls.REQUIREMENT_EVIDENCE), otherwise `not assessed`; never `met`. Without the file: section level only.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from pathlib import Path
 import _bootstrap  # noqa: F401
 from wclib import asvs
 from wclib.config import ConfigError, load_config
-from wclib.controls import EVIDENCE, map_controls, rules_for_section
+from wclib.controls import EVIDENCE, map_controls, requirements_for_finding, rules_for_requirement, rules_for_section
 from wclib.findings import Report
 from wclib.owasp import OwaspError, load_catalog, resolve_clone, resolve_data_dir
 from wclib.rules import RuleBook
@@ -98,12 +99,22 @@ def assess(cm, reports: list[Report], books: list[RuleBook], catalog: dict,
         row["clean_checks"] = [r for r in rules_for_section(a["code"]) if r in ran and r not in hit_rules]
         sec = (asvs_data or {}).get("sections", {}).get(a["code"])
         if sec:
-            # Related evidence only: a section finding doesn't show which requirement it tests (phase 3 maps that).
-            row["requirements"] = [{"id": i, "level": asvs_data["requirements"][i]["level"],
-                                    "text": asvs_data["requirements"][i]["text"], "status": "not assessed"}
+            row["requirements"] = [requirement_row(asvs_data, i, findings, ran)
                                    for i in asvs.in_level(asvs_data, sec["requirements"], level)]
         rows.append(row)
     return rows
+
+
+def requirement_row(asvs_data: dict, rid: str, findings: list, ran: set[str]) -> dict:
+    """Status only from findings mapped to this exact requirement (REQUIREMENT_EVIDENCE); never `met`."""
+    hits = [f for f in findings if rid in requirements_for_finding(f.rule, f.message)]
+    sev = {f.severity for f in hits}
+    hit_rules = {f.rule for f in hits}
+    return {"id": rid, "level": asvs_data["requirements"][rid]["level"], "text": asvs_data["requirements"][rid]["text"],
+            "status": "not met" if "error" in sev else "partial" if "warn" in sev else "not assessed",
+            "findings": [{"rule": f.rule, "severity": f.severity, "confidence": f.confidence, "file": f.file,
+                          "line": f.line, "message": f.message} for f in hits],
+            "clean_checks": [r for r in rules_for_requirement(rid) if r in ran and r not in hit_rules]}
 
 
 def _loc(f: dict) -> str:
@@ -132,8 +143,10 @@ def to_markdown(rows, cm, level, sources, project_commit, catalog_commit,
     out += [f"| {s} | {n} |" for s, n in counts.items()]
     out.append(f"| out of scope | {len(rows) - len(inscope)} |")
     if asvs_data:
-        out += ["", f"Requirements to assess: **{n_reqs}**, all `not assessed`: findings are listed with their section "
-                    "as related evidence, never as a requirement result."]
+        req_counts = {s: sum(q["status"] == s for r in inscope for q in r.get("requirements", [])) for s in ORDER}
+        out += ["", "| Status | Requirements |", "|---|---|"] + [f"| {s} | {n} |" for s, n in req_counts.items()]
+        out += ["", "A requirement is `not met` or `partial` only when a finding maps to that exact requirement; other "
+                    "findings are listed with their section as related evidence. Nothing is ever marked `met`."]
     gaps = sorted((r for r in inscope if r["status"] != "not assessed"),
                   key=lambda r: (ORDER[r["status"]], -len(r["findings"])))[:5]
     if gaps:
@@ -169,7 +182,15 @@ def to_markdown(rows, cm, level, sources, project_commit, catalog_commit,
                 out.append("Related evidence for this section: " + ", ".join(
                     f"`{f['rule']}`{_loc(f)}" for f in r["findings"][:4]) + (" …" if len(r["findings"]) > 4 else ""))
             out.append("")
-            out += [f"- [ ] **{q['id']}** (L{q['level']}) {q['text']}" for q in r["requirements"]]
+            for q in r["requirements"]:
+                status = "" if q["status"] == "not assessed" else f" · **{q['status']}**"
+                out.append(f"- [ ] **{q['id']}** (L{q['level']}){status} {q['text']}")
+                for f in q["findings"][:3]:
+                    out.append(f"  - `{f['rule']}` ({f['severity']}{'' if f['confidence'] == 'high' else ', verify'})"
+                               f"{_loc(f)}: {f['message']}")
+                if q["clean_checks"]:
+                    out.append("  - automated checks with no findings (not proof): "
+                               + ", ".join(f"`{c}`" for c in q["clean_checks"]))
         mapped = {r["code"] for r in rows}
         unmapped = sorted(set(asvs_data["sections"]) - mapped)
         if unmapped:  # a newer ASVS file with sections the cheat sheet index doesn't list yet

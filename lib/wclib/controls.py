@@ -77,8 +77,8 @@ NOT_APPLICABLE = {"V1.4": "memory-unsafe / unmanaged code: not applicable to a J
 # rule -> ASVS 5.0 sections it gives automated evidence for. Container rules follow OWASP's own
 # IndexASVS mapping (Docker_Security -> V13.2). Rules with no defensible ASVS section are left out.
 EVIDENCE: dict[str, tuple[str, ...]] = {
-    "sec.01": ("V1.2", "V1.3"), "sec.02": ("V3.5",), "sec.03": ("V3.4",), "sec.04": ("V3.4",), "sec.05": ("V3.4",),
-    "sec.06": ("V3.3",), "sec.07": ("V14.3", "V7.2"), "sec.08": ("V10.2",), "sec.09": ("V9.1",), "sec.10": ("V1.3", "V2.2"),
+    "sec.01": ("V1.2", "V1.3", "V3.2"), "sec.02": ("V3.5",), "sec.03": ("V3.4",), "sec.04": ("V3.4",), "sec.05": ("V3.4",),
+    "sec.06": ("V3.3",), "sec.07": ("V14.3", "V7.2"), "sec.08": ("V10.2",), "sec.09": ("V9.1",), "sec.10": ("V1.2", "V1.3", "V2.2"),
     "sec.11": ("V15.2",), "sec.12": ("V3.6",), "sec.13": ("V12.2", "V3.4"), "sec.14": ("V3.2",), "sec.15": ("V3.4",),
     "sec.16": ("V13.3", "V14.2"), "sec.17": ("V8.2", "V8.3", "V6.3"), "sec.18": ("V7.3",), "sec.19": ("V3.4",),
     "sec.20": ("V3.6",), "sec.21": ("V1.3",), "sec.22": ("V3.7",), "sec.23": ("V11.5",),
@@ -97,6 +97,57 @@ EVIDENCE: dict[str, tuple[str, ...]] = {
 
 def rules_for_section(section: str) -> list[str]:
     return sorted(r for r, secs in EVIDENCE.items() if section in secs)
+
+
+# (rule, message pattern or None, ASVS 5.0 requirements) where a matching finding shows that exact requirement is
+# not satisfied. Hand-checked against the requirement text; leave a rule out when it only relates to a section.
+# Left out on purpose: sec.07 (V14.3.3 allows session tokens in browser storage), run.* (no single requirement).
+REQUIREMENT_EVIDENCE: list[tuple[str, str | None, tuple[str, ...]]] = [
+    ("sec.01", r"dangerouslySetInnerHTML with a non-sanitized", ("V1.3.1",)),
+    ("sec.01", r"DOM HTML sink", ("V3.2.2",)),
+    ("sec.01", r"eval / new Function", ("V1.3.2",)),
+    ("sec.01", r"javascript: URLs", ("V1.2.2",)),
+    ("sec.01", r"JSON-LD", ("V1.2.3",)),
+    ("sec.02", None, ("V3.5.3",)),
+    ("sec.03", r"No Content-Security-Policy|No enforced Content-Security-Policy|unsafe-inline|unsafe-eval", ("V3.4.3",)),
+    ("sec.04", None, ("V3.4.2",)),
+    ("sec.05", None, ("V3.4.6",)),
+    ("sec.06", r"\bSecure\b", ("V3.3.1",)),
+    ("sec.06", r"SameSite", ("V3.3.2",)),
+    ("sec.06", r"HttpOnly", ("V3.3.4",)),
+    ("sec.09", r"decodes without verifying", ("V9.1.1",)),
+    ("sec.09", r"algorithms", ("V9.1.2",)),
+    ("sec.10", r"SQL|sql\.raw", ("V1.2.4",)),
+    ("sec.10", r"Shell command", ("V1.2.5",)),
+    ("sec.11", r"vulnerabilities in dependencies", ("V15.2.1",)),
+    ("sec.12", None, ("V3.6.1",)),
+    ("sec.13", r"HSTS|Strict-Transport-Security", ("V3.4.1",)),
+    ("sec.16", r"Hard-coded|found in the client bundle|NEXT_PUBLIC_ ships", ("V13.3.1",)),
+    ("sec.17", None, ("V8.2.1",)),
+    ("sec.19", r"HSTS|Strict-Transport-Security", ("V3.4.1",)),
+    ("sec.19", r"nosniff", ("V3.4.4",)),
+    ("sec.19", r"Referrer-Policy", ("V3.4.5",)),
+    ("sec.21", None, ("V1.3.6",)),
+    ("sec.22", None, ("V3.7.2",)),
+    ("sec.23", None, ("V11.5.1",)),
+    ("net.15", None, ("V2.4.1",)),
+    ("net.19", None, ("V2.2.1",)),
+    ("cache.08", r"sets a cookie", ("V14.2.2",)),
+    ("csec.01", None, ("V13.3.1",)),
+    ("csec.04", None, ("V13.3.1",)),
+    ("csec.05", None, ("V13.3.1",)),
+    ("csec.07", None, ("V13.2.1",)),
+    ("sup.01", None, ("V15.2.1",)),
+]
+
+
+def requirements_for_finding(rule: str, message: str) -> set[str]:
+    return {r for ru, pat, reqs in REQUIREMENT_EVIDENCE if ru == rule and (pat is None or re.search(pat, message))
+            for r in reqs}
+
+
+def rules_for_requirement(req: str) -> list[str]:
+    return sorted({ru for ru, _, reqs in REQUIREMENT_EVIDENCE if req in reqs})
 
 
 @dataclass

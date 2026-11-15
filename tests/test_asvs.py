@@ -179,12 +179,19 @@ class ChecklistTests(AsvsCase):
         self.assertEqual(sorted(q["id"] for q in l1), ["V15.1.1", "V3.3.1"])
         self.assertEqual(rows["V3.3"]["status"], "not met")  # section status still comes from the finding
         _, l3 = reqs("3")
+        by_id = {q["id"]: q for q in l3}
         self.assertEqual(len(l3), 4)
-        self.assertEqual({q["status"] for q in l3}, {"not assessed"})  # never inferred from section findings
+        # "cookie lacks Secure" maps to V3.3.1 only (REQUIREMENT_EVIDENCE); its neighbours are not inferred.
+        self.assertEqual(by_id["V3.3.1"]["status"], "not met")
+        self.assertEqual([f["rule"] for f in by_id["V3.3.1"]["findings"]], ["sec.06"])
+        self.assertEqual({by_id[i]["status"] for i in ("V3.3.2", "V3.4.1", "V15.1.1")}, {"not assessed"})
+        self.assertIn("sec.06", by_id["V3.3.2"]["clean_checks"])  # the SameSite check ran and found nothing
         md = self.checklist("--level", "1").stdout
         self.assertIn("# ASVS 5.0 Level 1 self-assessment (requirement level)", md)
         self.assertIn("2 requirements at L1", md)
-        self.assertIn("- [ ] **V3.3.1** (L1) Synthetic test requirement V3.3.1.", md)
+        self.assertIn("- [ ] **V3.3.1** (L1) · **not met** Synthetic test requirement V3.3.1.", md)
+        self.assertIn("  - `sec.06` (error) src/lib/auth.ts:4: cookie lacks Secure", md)
+        self.assertIn("| Status | Requirements |\n|---|---|\n| not met | 1 |\n| partial | 0 |\n| not assessed | 1 |", md)
         self.assertNotIn("V3.3.2", md)
         self.assertIn("Related evidence for this section: `sec.06` src/lib/auth.ts:4", md)
         self.assertIn("Cite: <" + asvs.SOURCE_BASE + "0x12-V3-Web-Frontend-Security.md#v33-cookie-setup>", md)

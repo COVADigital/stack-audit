@@ -34,7 +34,7 @@ Rules:
 - **No evidence means `not assessed`, not `met`.** Never infer compliance from the absence of findings.
 - **Automated findings are evidence of problems, not proof of safety.** A clean audit script supports `met` only for what that script actually checks (see each rule's check type in `web-standards/references/rule-index.md`).
 - Sections that need runtime verification (TLS, headers on the live URL, rate limits) need a live check or an attestation.
-- **Requirements (V3.3.1, …):** with the ASVS 5.0 release file installed (`check_freshness.py --asvs`), the checklist lists each in-scope section's requirements up to the chosen level, as `- [ ]` items. Every requirement starts as `not assessed`: a section's findings are shown as *related evidence*, because a finding on V3.3 doesn't tell you which of V3.3.1–V3.3.5 it tests. Record evidence per requirement and tick it only then. Without the file, assess at **section level** and say so.
+- **Requirements (V3.3.1, …):** with the ASVS 5.0 release file installed (`check_freshness.py --asvs`), the checklist lists each in-scope section's requirements up to the chosen level, as `- [ ]` items. A requirement gets `not met` / `partial` only from a finding mapped to that exact requirement (the hand-checked rule-to-requirement map in `lib/wclib/controls.py`, e.g. a cookie set without `Secure` → V3.3.1). Other findings appear as *related evidence* for the section, because a finding on V3.3 doesn't tell you which of V3.3.1–V3.3.5 it tests. Mapped checks that ran clean are listed but are not proof: a requirement is never marked `met` automatically. Record evidence per requirement and tick it only then. Without the file, assess at **section level** and say so.
 
 ## 4. Report shape
 

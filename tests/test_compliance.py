@@ -1,11 +1,14 @@
 """Tests for wclib.controls, map_controls.py and compliance_checklist.py (M7)."""
 
 import json
+import re
 import unittest
 
 from helpers import PLUGIN_ROOT, TempRepo
 from test_owasp import REAL_CLONES, MiniClone
-from wclib.controls import EVIDENCE, GATED, NOT_APPLICABLE, SIGNALS, map_controls
+from wclib import asvs
+from wclib.controls import (EVIDENCE, GATED, NOT_APPLICABLE, REQUIREMENT_EVIDENCE, SIGNALS, map_controls,
+                            requirements_for_finding, rules_for_requirement)
 from wclib.owasp import build_catalog, parse_asvs_index, parse_top10_index
 from wclib.rules import RuleBook
 
@@ -100,12 +103,41 @@ class ChecklistTests(MiniClone):
 
 
 class DataIntegrityTests(unittest.TestCase):
-    """Every sheet, ASVS section and rule named in controls.py must exist."""
+    """Every sheet, ASVS section, requirement and rule named in controls.py must exist."""
 
     def test_rules_exist(self):
         books = [RuleBook(PLUGIN_ROOT / "skills" / s) for s in ("web-standards", "container-standards")]
         known = {f"{p}.{nn}" for rb in books for p, rules in rb.rules.items() for nn in rules}
         self.assertEqual(sorted(set(EVIDENCE) - known), [])
+        self.assertEqual(sorted({r for r, _, _ in REQUIREMENT_EVIDENCE} - known), [])
+
+    def test_requirement_map_patterns_match_real_messages(self):
+        # A reworded message would silently stop matching: each pattern must match a source line with its rule.
+        src = [line for p in sorted(PLUGIN_ROOT.glob("skills/*/scripts/*.py"))
+               for line in p.read_text(encoding="utf-8").splitlines()]
+        for rule, pat, reqs in REQUIREMENT_EVIDENCE:
+            lines = [ln for ln in src if f'"{rule}"' in ln]
+            self.assertTrue(lines, rule)
+            if pat:
+                self.assertTrue(any(re.search(pat, ln) for ln in lines), f"{rule} pattern {pat!r} matches no message")
+            for r in reqs:
+                self.assertRegex(r, r"^V\d+\.\d+\.\d+$")
+        self.assertEqual(requirements_for_finding("sec.19", "No X-Content-Type-Options: nosniff header"), {"V3.4.4"})
+        self.assertEqual(requirements_for_finding("sec.06", "cookie 'sid' set without Secure, HttpOnly"),
+                         {"V3.3.1", "V3.3.4"})
+        self.assertEqual(requirements_for_finding("sec.07", "token in localStorage"), set())
+        self.assertEqual(rules_for_requirement("V3.4.1"), ["sec.13", "sec.19"])
+
+    def test_requirement_map_ids_exist_in_real_asvs(self):
+        data, why = asvs.try_load()
+        if not data:
+            self.skipTest(f"ASVS file not installed ({why[:60]})")
+        ids = {r for _, _, reqs in REQUIREMENT_EVIDENCE for r in reqs}
+        self.assertEqual(sorted(ids - set(data["requirements"])), [])
+        # The requirement's section must also be one of the rule's section-level mappings.
+        for rule, _, reqs in REQUIREMENT_EVIDENCE:
+            for r in reqs:
+                self.assertIn(data["requirements"][r]["section_id"], EVIDENCE.get(rule, ()), f"{rule} -> {r}")
 
     def test_sheets_and_sections_exist_in_real_clone(self):
         clone = next((c for c in REAL_CLONES if (c / "cheatsheets").is_dir()), None)
