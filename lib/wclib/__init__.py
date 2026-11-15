@@ -13,4 +13,12 @@ Standard library only. Every audit script in the plugin builds on:
 All scripts are read-only: they never modify the audited repository.
 """
 
+import sys
+
 __version__ = "0.1.0"
+
+# Reports are UTF-8 everywhere. Before Python 3.15, Windows writes piped output in the ANSI
+# code page (cp1252), which callers reading UTF-8 (run_audit.py, the hooks, CI) can't decode.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure") and (_stream.encoding or "").lower().replace("-", "") != "utf8":
+        _stream.reconfigure(encoding="utf-8")
