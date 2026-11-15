@@ -2,7 +2,7 @@
 
 - Every rule labelled auto/heuristic must be reported by some script. Reports and the ASVS
   checklist count those rules as checked, so a label with no check behind it is a silent pass.
-- Every rule a script reports must appear in some test, except the shrink-only UNTESTED list.
+- Every rule a script reports must appear in some test (UNTESTED is the escape hatch; keep it empty).
 """
 
 import json
@@ -16,12 +16,8 @@ RID = r"(?:git|ren|perf|state|net|cache|arch|sec|a11y|img|run|cnet|csec|host|sup
 # Labelled auto because another rule's check covers them; the report says which.
 CROSS_REF = {"net.14": "sec.04", "cache.05": "sec.07"}
 
-# Reported by a script but no test yet. Shrink-only: the test fails when an entry gains a test.
-UNTESTED = {
-    "a11y.11", "a11y.16", "a11y.18", "a11y.19", "arch.01", "arch.09", "arch.14", "arch.17", "arch.21",
-    "perf.10", "perf.15", "perf.19", "ren.04", "ren.06", "ren.09", "ren.11", "ren.14", "ren.18", "ren.19",
-    "state.06", "state.12", "state.19",
-}
+# Reported by a script but no test yet. Empty since 0.2.4: every new rule ships with a test.
+UNTESTED: set[str] = set()
 
 
 def _read(paths) -> str:

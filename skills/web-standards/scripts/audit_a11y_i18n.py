@@ -211,7 +211,9 @@ class A11yAudit:
         if i18n:
             for f in self.files:
                 self.i18n_strings(f)
-            if re.search(r"\[locale\]", " ".join(self.ctx.walker.all_files())) and not re.search(r"hreflang|hrefLang|alternates\s*:\s*\{[^}]*languages", code + self.next_config_text()):
+            # Metadata often lives in .ts helpers or JSX-free layouts, which self.files skips.
+            meta_code = "\n".join(sf.read() for sf in self.ctx.walker.files(exts={".ts", ".tsx", ".js", ".mjs"}))
+            if re.search(r"\[locale\]", " ".join(self.ctx.walker.all_files())) and not re.search(r"hreflang|hrefLang|alternates\s*:\s*\{[^}]*languages", meta_code + self.next_config_text()):
                 self.add("a11y.19", "Locale-prefixed routes but no hreflang / alternates.languages metadata found",
                          fix_hint="generateMetadata → alternates: { languages: { en: '/en/…', es: '/es/…' } }")
         self.messages(rtl_check=True)

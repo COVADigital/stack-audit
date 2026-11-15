@@ -39,6 +39,47 @@ class Case(TempRepo):
 class RenderingTests(Case):
     script = "audit_rendering.py"
 
+    def test_route_inventory_findings(self):
+        layout = "export default function L({ children }) { return <html><body>{children}</body></html>; }\n"
+        self.write("app/layout.tsx", layout)
+        self.write("app/page.tsx", "export default async function P() { const d = await getData(); return <div>{d}</div>; }\n")
+        self.write("app/c/page.tsx", "'use client';\nexport default function C() { return <button>x</button>; }\n")
+        self.write("middleware.ts", "export function middleware() {}\n")
+        self.write("app/globals.css", ".panel { transition: width 0.2s ease; }\n")
+        self.write("lib/measure.ts", "export function fit(items) {\n"
+                   "  items.forEach((el) => { const h = el.offsetHeight; el.style.height = h + 'px'; });\n}\n")
+        d = self.run_audit()
+        self.assertIn("ren.04", self.rules(d, "app/page.tsx"))
+        self.assertIn("ren.06", self.rules(d, "c/page.tsx"))
+        self.assertIn("ren.09", self.rules(d, "middleware.ts"))
+        self.assertIn("ren.11", self.rules(d, "globals.css"))
+        self.assertIn("ren.14", self.rules(d, "measure.ts"))
+        r18, r19 = " ".join(self.msgs(d, "ren.18")), " ".join(self.msgs(d, "ren.19"))
+        for m in ("No sitemap", "No robots", "has no metadata"):
+            self.assertIn(m, r18)
+        for m in ("No app/global-error.tsx", "no error.tsx exists"):
+            self.assertIn(m, r19)
+        (self.dir / "middleware.ts").unlink()
+        (self.dir / "app" / "c" / "page.tsx").unlink()
+        self.write("proxy.ts", "export function proxy() {}\n")
+        self.write("app/layout.tsx", "export const metadata = { title: 'A' };\n" + layout)
+        self.write("app/loading.tsx", "export default function L() { return null; }\n")
+        self.write("app/error.tsx", "'use client';\nexport default function E() { return null; }\n")
+        self.write("app/global-error.tsx", "'use client';\nexport default function G() { return <html><body /></html>; }\n")
+        self.write("app/sitemap.ts", "export default function s() { return []; }\n")
+        self.write("app/robots.ts", "export default function r() { return {}; }\n")
+        d = self.run_audit()
+        for r in ("ren.04", "ren.06", "ren.09", "ren.18", "ren.19"):
+            self.assertNotIn(r, self.rules(d), r)
+
+    def test_error_directive_and_edge_runtime(self):
+        self.write("next.config.ts", "export default { cacheComponents: true };\n")
+        self.write("app/error.tsx", "export default function E() { return null; }\n")
+        self.write("app/api/x/route.ts", "export const runtime = 'edge';\nexport async function GET() { return new Response('x'); }\n")
+        d = self.run_audit()
+        self.assertTrue(any("must be a Client Component" in m for m in self.msgs(d, "ren.19")))
+        self.assertTrue(any("edge" in m for m in self.msgs(d, "ren.09")))
+
     def test_cache_components_and_revalidation(self):
         self.write("next.config.ts", "export default { cacheComponents: true }")
         self.write("app/blog/page.tsx", "export const revalidate = 3600;\nexport const metadata = { title: 'Blog' };\nexport default function P(){ return <h1>Blog</h1> }")
@@ -154,6 +195,20 @@ items.forEach(async (i) => { await save(i); });
 class StateTests(Case):
     script = "audit_state.py"
 
+    def test_query_keys_forms_and_logout(self):
+        for n in ("a", "b", "c"):
+            self.write(f"app/{n}.tsx", "'use client';\nexport const Q = () => useQuery({ queryKey: ['products'], queryFn });\n")
+        self.write("app/form.tsx", "'use client';\nexport const F = () => { const f = useForm({ defaultValues: {} }); return null; };\n")
+        self.write("app/form-ok.tsx", "'use client';\nexport const F = () => { const f = useForm({ resolver: zodResolver(S) }); return null; };\n")
+        self.write("lib/auth.ts", "export async function logout() { await fetch('/api/logout', { method: 'POST' }); }\n")
+        d = self.run_audit()
+        self.assertTrue(any("['products']" in m and "3 files" in m for m in self.msgs(d, "state.06")), self.msgs(d, "state.06"))
+        self.assertIn("state.12", self.rules(d, "form.tsx"))
+        self.assertNotIn("state.12", self.rules(d, "form-ok.tsx"))
+        self.assertIn("state.19", self.rules(d))
+        self.write("lib/auth.ts", "const bc = new BroadcastChannel('auth');\nexport async function logout() { bc.postMessage('logout'); }\n")
+        self.assertNotIn("state.19", self.rules(self.run_audit()))
+
     def test_state_patterns(self):
         self.write("app/list.tsx", """'use client';
 import { create } from 'zustand';
@@ -190,6 +245,22 @@ export const b = create(persist((set) => ({}), { name: 'prefs', version: 2, migr
 
 class PerformanceTests(Case):
     script = "audit_performance.py"
+
+    def test_fonts_compiler_and_lighthouse(self):
+        self.write("next.config.ts", "export default { reactCompiler: true };\n")
+        self.write("app/layout.tsx", "import { Inter, Roboto, Lora } from 'next/font/google';\n"
+                   "export default function L({ children }) { return children; }\n")
+        self.write("app/head.tsx", 'export const H = () => <link href="https://fonts.googleapis.com/css2?family=Inter" rel="stylesheet" />;\n')
+        self.write("app/globals.css", "@import url('https://fonts.googleapis.com/css2?family=Lora');\n")
+        self.write("app/list.tsx", "'use client';\nexport function L({ xs }) { const s = useMemo(() => xs.length, [xs]); return s; }\n")
+        d = self.run_audit()
+        p10 = " ".join(self.msgs(d, "perf.10"))
+        for m in ("fonts.googleapis.com", "3 font families", "CSS @import"):
+            self.assertIn(m, p10)
+        self.assertIn("perf.15", self.rules(d))
+        self.assertIn("perf.19", self.rules(d))
+        self.write("lighthouserc.json", "{}")
+        self.assertNotIn("perf.19", self.rules(self.run_audit()))
 
     def test_static_checks(self):
         self.write("app/c.tsx", """'use client';
@@ -281,6 +352,26 @@ export async function priv() { 'use cache: private'; const c = await cookies(); 
 
 class ArchitectureTests(Case):
     script = "audit_architecture.py"
+
+    def test_size_routes_registries_codeowners(self):
+        self.write("app/big.tsx", "export const Big = () => null;\n" * 320)  # over 2x componentMaxLines (150)
+        self.write("app/items/page.tsx", "import { db } from '@/lib/db';\n"
+                   "export default async function P() { const r = await db.select().from(items); return r; }\n")
+        self.write("app/health/route.ts", "import { db } from '@/lib/db';\nexport async function GET() { return Response.json({}); }\n")
+        self.write("components/Blocks.tsx", "export function B({ block }) {\n  const C = registry[block._type];\n  return <C {...block} />;\n}\n")
+        self.write("components/BlocksOk.tsx", "export function B({ block }) {\n  const C = registry[block._type];\n"
+                   "  return C ? <C {...block} /> : null;\n}\n")
+        self.write(".github/CODEOWNERS", "/app/ @team\n/legacy/ @team\n*.css @design\n")
+        d = self.run_audit()
+        self.assertIn("arch.01", self.rules(d, "big.tsx"))
+        self.assertIn("arch.09", self.rules(d, "items/page.tsx"))
+        self.assertIn("arch.21", self.rules(d, "items/page.tsx"))
+        self.assertNotIn("arch.21", self.rules(d, "health/route.ts"))
+        self.assertIn("arch.14", self.rules(d, "Blocks.tsx"))
+        self.assertNotIn("arch.14", self.rules(d, "BlocksOk.tsx"))
+        a17 = self.msgs(d, "arch.17")
+        self.assertEqual(len(a17), 1, a17)
+        self.assertIn("/legacy/", a17[0])
 
     def test_cycles_boundaries_env(self):
         self.write("tsconfig.json", '{ // comment\n "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"] }, }, }')

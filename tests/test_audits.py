@@ -375,6 +375,30 @@ class A11yAuditTests(AuditCase):
         super().setUp()
         self.write("package.json", PKG)
 
+    def test_i18n_rtl_plurals_live_regions(self):
+        self.write("package.json", json.dumps({"dependencies": {"next": "16.1.0", "react": "19.2.0", "next-intl": "4.0.0"}}))
+        self.write("messages/en.json", '{"hi": "Hi"}')
+        self.write("messages/ar.json", '{"hi": "مرحبا"}')
+        self.write("app/[locale]/page.tsx", 'export default function P() { return <main className="ml-4 text-left">x</main>; }\n')
+        self.write("app/[locale]/about/page.tsx", 'export default function P() { return <main className="ms-4 text-start">x</main>; }\n')
+        self.write("app/globals.css", ".card { margin-left: 4px; }\n")
+        self.write("components/Toast.tsx", 'export function Toast({ msg }) { return <div className="toast">{msg}</div>; }\n')
+        self.write("components/notification-region.tsx",
+                   'export function N({ msg }) { return <div role="status" aria-live="polite">{msg}</div>; }\n')
+        self.write("components/Count.tsx", "export const Count = ({ n }) => <span>{`${n} item${n === 1 ? '' : 's'}`}</span>;\n")
+        d = self.run_audit()
+        self.assertIn("a11y.16", self.rules_in(d, "[locale]/page.tsx"))
+        self.assertNotIn("a11y.16", self.rules_in(d, "about/page.tsx"))
+        self.assertIn("a11y.16", self.rules_in(d, "globals.css"))
+        self.assertIn("a11y.11", self.rules_in(d, "Toast.tsx"))
+        self.assertNotIn("a11y.11", self.rules_in(d, "notification-region.tsx"))
+        self.assertIn("a11y.18", self.rules_in(d, "Count.tsx"))
+        self.assertIn("a11y.19", self.rules_in(d))
+        # Found by this test: alternates in a .ts helper (no JSX) used to be ignored.
+        self.write("lib/seo.ts", "export const alternates = { languages: { en: '/en', ar: '/ar' } };\n"
+                   "export const meta = { alternates: { languages: { en: '/en' } } };\n")
+        self.assertNotIn("a11y.19", self.rules_in(self.run_audit()))
+
     def test_bad_markup(self):
         self.write("app/page.tsx", """
 export default function Page() {
