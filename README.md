@@ -184,6 +184,12 @@ Run the tests with:
 python -m unittest discover -s tests -t tests
 ```
 
+## Contributing and security
+
+- **Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md) for how to report a false positive, run the tests and add a rule.
+- **Security:** to report a vulnerability in the plugin, follow [SECURITY.md](SECURITY.md). Please don't open a public issue for it.
+- **Conduct:** this project follows a [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## License and attribution
 
 MIT. See [LICENSE](LICENSE).
