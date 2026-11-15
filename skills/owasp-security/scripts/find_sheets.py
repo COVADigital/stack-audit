@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import _bootstrap  # noqa: F401
+from wclib import asvs
 from wclib.owasp import OwaspError, load_catalog, resolve_clone, resolve_data_dir, section_url
 
 STOPWORDS = {
@@ -174,7 +175,7 @@ def mapping_lookup(catalog: dict, asvs: str | None, top10: str | None) -> dict:
     return {"kind": f"OWASP Top 10 {cat['year']}", "code": code, "title": cat["title"], "sections": {code: cat}}
 
 
-def render_mapping_md(res: dict, catalog: dict) -> str:
+def render_mapping_md(res: dict, catalog: dict, asvs_data: dict | None = None, asvs_note: str | None = None) -> str:
     out = [f"# {res['kind']} {res['code']}: {res['title']}", ""]
     for code, sec in res["sections"].items():
         out.append(f"## {code} {sec['title']}")
@@ -182,7 +183,17 @@ def render_mapping_md(res: dict, catalog: dict) -> str:
             sheet = catalog["sheets"].get(sid)
             label = f"{sheet['title']} ({sheet['status']})" if sheet else f"{sid} (NOT IN CLONE)"
             out.append(f"- `{sid}`: {label}" + (f" <{sheet['url']}>" if sheet and sheet.get("url") else ""))
+        asvs_sec = (asvs_data or {}).get("sections", {}).get(code)
+        if asvs_sec:
+            out.append(f"\nRequirements (read with `read_requirement.py --section {code}`, cite <{asvs.cite_url(asvs_data, code)}>):")
+            for rid in asvs_sec["requirements"]:
+                r = asvs_data["requirements"][rid]
+                first = r["text"] if len(r["text"]) <= 110 else r["text"][:107].rsplit(" ", 1)[0] + "…"
+                out.append(f"- `{rid}` (L{r['level']}) {first}")
         out.append("")
+    if res["kind"].startswith("ASVS"):
+        out.append(f"_Requirement text: {asvs.ATTRIBUTION}_" if asvs_data else
+                   f"_Requirement-level text not installed: section level only. {asvs_note}_")
     src = catalog["source"]
     out.append(f"_Source: OWASP Cheat Sheet Series index files @ {(src.get('commit') or '?')[:7]}_")
     return "\n".join(out)
@@ -210,6 +221,7 @@ def main() -> int:
     ap.add_argument("query", nargs="?", help="Free-text query")
     ap.add_argument("--asvs", help="ASVS 5.0 chapter or section, e.g. V3 or V3.3")
     ap.add_argument("--top10", help="Top 10 2021 category, e.g. A01")
+    ap.add_argument("--asvs-file", help="Path to the ASVS release JSON (default ~/.claude/data/owasp-asvs/)")
     ap.add_argument("--top", type=int, default=8)
     ap.add_argument("--stack-root", help="Boost sheets matching this project's stack")
     ap.add_argument("--clone")
@@ -223,7 +235,14 @@ def main() -> int:
         catalog = load_catalog(resolve_data_dir(args.data_dir), clone)
         if args.asvs or args.top10:
             res = mapping_lookup(catalog, args.asvs, args.top10)
-            print(json.dumps(res, indent=2) if args.format == "json" else render_mapping_md(res, catalog))
+            data, note = asvs.try_load(args.asvs_file) if args.asvs else (None, None)
+            if args.format == "json":
+                if data:
+                    res["requirements"] = {c: [data["requirements"][i] for i in data["sections"][c]["requirements"]]
+                                           for c in res["sections"] if c in data["sections"]}
+                print(json.dumps(res, indent=2))
+            else:
+                print(render_mapping_md(res, catalog, data, note))
             return 0
         hits = search(catalog, clone, args.query, args.top, stack_boosts(args.stack_root))
     except OwaspError as exc:

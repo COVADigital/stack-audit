@@ -61,4 +61,39 @@ def owasp_note() -> str:
         return ""
 
 
-print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": CONTEXT + owasp_note()}}))
+ASVS_SETUP = """
+Optional setup for stack-audit:owasp-security: the ASVS {version} requirement text is {state}, so ASVS answers stay at section level (V3.3, not V3.3.1). The first time an ASVS question comes up, tell the user and offer to download it (163 KB, OWASP's GitHub release, into their home folder), and run this only after they agree:
+{command}
+Then verify it: python "{checker}" --asvs
+Do not mention this for unrelated work."""
+
+
+def asvs_note() -> str:
+    """A note when the ASVS release JSON is missing or fails its hash check, else ''. Never downloads."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+        from wclib import asvs
+        from wclib.config import load_config
+        try:
+            config = load_config(Path.cwd())
+        except Exception:
+            config = {}
+        try:
+            path = asvs.resolve_path(config=config)
+        except asvs.AsvsError:
+            path, state = asvs.DEFAULT_PATH, "not installed"
+        else:
+            try:
+                asvs.load(path)
+                return ""
+            except asvs.AsvsError:
+                state = f"at {path.as_posix()} but does not match the pinned release (wrong version or incomplete)"
+        checker = Path(__file__).resolve().parent.parent / "skills" / "owasp-security" / "scripts" / "check_freshness.py"
+        return ASVS_SETUP.format(version=asvs.VERSION, state=state, command=asvs.download_command(path),
+                                 checker=checker.as_posix())
+    except Exception:
+        return ""
+
+
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                         "additionalContext": CONTEXT + owasp_note() + asvs_note()}}))

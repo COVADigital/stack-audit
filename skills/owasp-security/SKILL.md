@@ -6,7 +6,7 @@ allowed-tools: Bash(python ${CLAUDE_PLUGIN_ROOT}/skills/owasp-security/scripts/*
 
 # OWASP Security
 
-This skill works from a **local clone** of the OWASP Cheat Sheet Series (139 sheets, CC BY-SA 4.0) through a generated catalog of headings, anchors and the official index mappings. The scripts only read files. They never pull, clone or reach the network.
+This skill works from a **local clone** of the OWASP Cheat Sheet Series (139 sheets, CC BY-SA 4.0) through a generated catalog of headings, anchors and the official index mappings, plus (optionally) OWASP's ASVS 5.0 release file for requirement text. The scripts only read files. They never pull, clone or reach the network.
 
 Script prefix used below: `S=${CLAUDE_PLUGIN_ROOT}/skills/owasp-security/scripts`. Always add `--data-dir ${CLAUDE_PLUGIN_DATA}`. If the clone isn't in the default location (`~/.claude/data/owasp-cheatsheets`), also add `--clone <path>`.
 
@@ -43,6 +43,17 @@ python $S/find_sheets.py --top10 A01   # a Top 10 2021 category → mapped sheet
 ```
 
 - The mappings come from OWASP's own `IndexASVS.md` (ASVS **5.0.x**, section level) and `IndexTopTen.md` (Top 10 **2021**; the repo hasn't published a 2025 index yet). Always label the edition.
+
+### ASVS requirements (V3.3.1, not just V3.3)
+
+```bash
+python $S/read_requirement.py V3.3.1 V3.3.2                 # text, level, citation link, related sheets
+python $S/read_requirement.py --section V3.3 --level 2      # a section's requirements at L1–L2
+python $S/check_freshness.py --asvs                          # is the requirement data installed and intact?
+```
+- Requirement text comes from OWASP's ASVS 5.0.0 release file (CC BY-SA 4.0), downloaded once into `~/.claude/data/owasp-asvs/` and checked against a pinned SHA-256. With it, `find_sheets.py --asvs V3.3` also lists the section's requirements.
+- **Cite a requirement only after a script printed it in this session**, with its link: *ASVS 5.0 V3.3.1 (L1) ([OWASP ASVS 5.0 › V3.3 Cookie Setup](<cite URL from the script>))*. Never write an ASVS ID or its text from memory: 4.x numbers mean different things in 5.0. `verify_citations.py` flags IDs that don't exist in 5.0.
+- **Not installed?** Work at section level and say so. The first time ASVS comes up, offer the download command that `check_freshness.py --asvs` prints (163 KB from OWASP's GitHub release); run it only after the user agrees, then run `check_freshness.py --asvs` to verify it.
 
 ### What applies to this project, and how do we stand?
 

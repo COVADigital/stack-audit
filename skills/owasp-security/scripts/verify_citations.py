@@ -6,6 +6,7 @@ Checks, in the given files/directories (default: the plugin's skills/):
 - Markdown: rows of any "## OWASP mapping" table, inline `OWASP: Sheet[#anchor]`,
   and https://cheatsheetseries.owasp.org/cheatsheets/<Sheet>_Cheat_Sheet.html#anchor URLs
 - JSON reports: any "owasp": [...] arrays of strings
+- Markdown: ASVS 5.0 references (V3.3.1, V3.3) against the ASVS release JSON when installed
 
     python verify_citations.py [PATH ...] [--clone PATH] [--data-dir DIR] [--format md|json]
 
@@ -21,6 +22,7 @@ import sys
 from pathlib import Path
 
 import _bootstrap  # noqa: F401
+from wclib import asvs
 from wclib.findings import Finding, Report
 from wclib.owasp import OwaspError, find_sheet, load_catalog, resolve_clone, resolve_data_dir
 
@@ -95,6 +97,7 @@ def main() -> int:
     ap.add_argument("paths", nargs="*", type=Path, default=[plugin_skills])
     ap.add_argument("--clone")
     ap.add_argument("--data-dir")
+    ap.add_argument("--asvs", help="Path to the ASVS release JSON")
     ap.add_argument("--format", choices=("md", "json"), default="md")
     args = ap.parse_args()
     try:
@@ -104,11 +107,20 @@ def main() -> int:
         return 2
 
     report = Report(tool="verify_citations", root=", ".join(str(p) for p in args.paths))
-    checked = 0
+    asvs_data, asvs_note = asvs.try_load(args.asvs)
+    checked = asvs_checked = 0
     for f in collect(args.paths):
         rel = str(f)
         if f.suffix == ".md":
-            cites = citations_in_markdown(f.read_text(encoding="utf-8", errors="replace"))
+            text = f.read_text(encoding="utf-8", errors="replace")
+            cites = citations_in_markdown(text)
+            for line, kind, ref in asvs.refs_in_text(text):
+                asvs_checked += 1
+                known = (asvs_data or {}).get("requirements" if kind == "req" else "sections", {})
+                if asvs_data and ref not in known:
+                    report.add(Finding("owasp.04", "error", f"ASVS {asvs.VERSION} {'requirement' if kind == 'req' else 'section'} "
+                                       f"{ref} does not exist", file=rel, line=line,
+                                       fix_hint="read_requirement.py --section V#.# lists the real IDs (4.x numbering differs)"))
         else:
             try:
                 cites = citations_in_json(json.loads(f.read_text(encoding="utf-8")), rel)
@@ -128,11 +140,15 @@ def main() -> int:
             if sheet["status"] == "draft":
                 report.add(Finding("owasp.03", "info", f"Cites draft sheet {sid} (not yet reviewed by OWASP)",
                                    file=rel, line=line))
+    if asvs_checked and not asvs_data:
+        report.add(Finding("owasp.05", "info", f"{asvs_checked} ASVS reference(s) not verified: {asvs_note}"))
     report.meta["citations_checked"] = checked
+    report.meta["asvs_references_checked"] = asvs_checked if asvs_data else 0
     report.meta["catalog_commit"] = catalog["source"].get("commit")
     print(report.render(args.format))
     if args.format == "md":
-        print(f"\n{checked} citation(s) checked against catalog @ {(catalog['source'].get('commit') or '?')[:7]}.")
+        print(f"\n{checked} citation(s) checked against catalog @ {(catalog['source'].get('commit') or '?')[:7]}."
+              + (f" {asvs_checked} ASVS {asvs.VERSION} reference(s) checked." if asvs_data and asvs_checked else ""))
     return 1 if report.has_errors() else 0
 
 

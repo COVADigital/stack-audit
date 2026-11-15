@@ -25,7 +25,8 @@ DEFAULTS: dict = {
     "i18n": {"sourceLocale": "en", "messagesDir": "messages"},
     "asvs": {"level": None},  # None = infer (L1 content sites, L2 accounts/payments/admin)
     "containers": {"platformAllowlist": ["coolify", "coolify-proxy", "coolify-realtime", "coolify-db", "coolify-redis"]},
-    "owasp": {"cheatsheetsPath": None, "autoUpdate": False},  # path None = ~/.claude/data/owasp-cheatsheets
+    # paths None = ~/.claude/data/owasp-cheatsheets and ~/.claude/data/owasp-asvs/asvs-5.0.0.flat.json
+    "owasp": {"cheatsheetsPath": None, "asvsPath": None, "autoUpdate": False},
     "hooks": {"onEdit": True},  # PostToolUse check of each file Claude edits
     "ignorePaths": [],
     "ignore": {},  # { "sec.01": ["src/legacy/**"] }

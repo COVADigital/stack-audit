@@ -71,6 +71,18 @@ git clone https://github.com/OWASP/CheatSheetSeries.git ~/.claude/data/owasp-che
 
 To keep it somewhere else, set `STACK_AUDIT_OWASP_CHEATSHEETS` to the path.
 
+### Optional: ASVS requirement text
+
+Without it, ASVS answers work at section level (V3.3 Cookie Setup). With it, Claude can quote individual requirements (V3.3.1) with their level and a link. The text is OWASP's ASVS 5.0.0 release file (163 KB, CC BY-SA 4.0), downloaded separately and never bundled with the plugin. Claude offers the command the first time ASVS comes up and runs it only if you agree. To do it yourself:
+
+```sh
+curl -fsSL --create-dirs -o ~/.claude/data/owasp-asvs/asvs-5.0.0.flat.json \
+  https://github.com/OWASP/ASVS/releases/download/v5.0.0_release/OWASP_Application_Security_Verification_Standard_5.0.0_en.flat.json
+python skills/owasp-security/scripts/check_freshness.py --asvs   # checks the pinned SHA-256
+```
+
+The plugin refuses a file that doesn't match the pinned hash. To keep it elsewhere, set `STACK_AUDIT_OWASP_ASVS` to the file's path.
+
 ### Keeping the cheat sheets current
 
 At the start of each session the plugin checks how long ago the clone was last updated. This is a local file check with no network access. If it has been more than 30 days, Claude tells you the next time an OWASP question comes up and offers to update it; it runs `git pull` only if you agree. The copy keeps working if you decline.
@@ -125,7 +137,8 @@ python skills/container-standards/scripts/run_audit.py --root path/to/repo --pha
 # OWASP: find the right sheet, read one section, check citations in a document
 python skills/owasp-security/scripts/find_sheets.py "csrf server actions"
 python skills/owasp-security/scripts/read_section.py --sheet Session_Management --list
-python skills/owasp-security/scripts/verify_citations.py docs/security.md
+python skills/owasp-security/scripts/read_requirement.py --section V3.3 --level 2   # needs the ASVS file
+python skills/owasp-security/scripts/verify_citations.py docs/security.md            # sheets, anchors and ASVS IDs
 ```
 
 Conventions shared by every audit script:
