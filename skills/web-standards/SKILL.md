@@ -6,7 +6,7 @@ allowed-tools: Bash(python ${CLAUDE_PLUGIN_ROOT}/scripts/stack_profile.py *), Ba
 
 # Web Standards
 
-Every **Rule** line in `references/` is a requirement. Findings and advice cite rule IDs such as `sec.16`, meaning section 16 of `08-security.md`. `references/rule-index.md` lists all 177 rules, with how each one is checked.
+Every **Rule** line in `references/` is a requirement. Findings and advice cite rule IDs such as `sec.16`, meaning section 16 of `08-security.md`. `references/rule-index.md` lists all 179 rules, with how each one is checked.
 
 ## 0. Detect the stack first (always)
 
@@ -76,7 +76,7 @@ Single domains: `audit_security.py` (sec), `audit_git.py` (git), `audit_a11y_i18
 - **Triage before reporting.** Open the file for every `confidence: medium/low` finding and confirm it. Drop false positives, and say how many you dropped. Real-repo trials showed common false-positive shapes (auth inside wrapper helpers, validation in another module), so read the surrounding code.
 - Report findings grouped by severity: severity · `rule-id` · `file:line` · problem · fix. Don't paste raw JSON.
 
-**Manual rules** (49 of 177, listed under each report's "Not checked"): walk them in `rule-index.md` for the domains the change touches, and give your assessment.
+**Manual rules** (55 of 179, listed under each report's "Not checked"): walk them in `rule-index.md` for the domains the change touches, and give your assessment.
 
 Always end with **"Not checked"**: each script's `not_checked` list plus anything you couldn't assess. Never imply coverage you didn't have.
 
@@ -90,7 +90,7 @@ Always end with **"Not checked"**: each script's `not_checked` list plus anythin
 ## 5. Fixing and templates
 
 - Change code only when the user asks. Keep fixes to the smallest scope, and cite the rule ID in the summary.
-- `assets/` holds starting templates: `gitignore.nextjs`, `dependabot.yml`, `pre-commit-config.yaml`, `lighthouserc.json`, `security-headers.next.config.ts`, `proxy.csp.ts`, `axe.spec.ts`, `adr-template.md`, `route-decision-header.txt`, `stack-audit.config.json`. Copy one in only on request, and adapt it to the repo: never overwrite an existing file without showing the diff.
+- `assets/` holds starting templates: `gitignore.nextjs`, `dependabot.yml`, `pre-commit-config.yaml`, `lighthouserc.json`, `security-headers.next.config.ts`, `proxy.csp.ts`, `axe.spec.ts`, `adr-template.md`, `route-decision-header.txt`, `stack-audit.config.json`, `ci-stack-audit.yml` (runs these audits in GitHub Actions with code-scanning upload). Copy one in only on request, and adapt it to the repo: never overwrite an existing file without showing the diff.
 
 ## 6. Suppressions (for audit output)
 

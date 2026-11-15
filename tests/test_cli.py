@@ -51,6 +51,18 @@ class CliTests(TempRepo):
             make_context(args)
         self.assertEqual(cm.exception.code, EXIT_USAGE)
 
+    def test_files_limits_walker_and_rejects_outside_root(self):
+        self.write("a.ts", "x")
+        self.write("sub/b.ts", "y")
+        args = build_parser("test").parse_args(["--root", str(self.dir), "--files", "sub/b.ts", str(self.dir / "a.ts")])
+        self.assertEqual(make_context(args).walker.all_files(), ["a.ts", "sub/b.ts"])
+        args = build_parser("test").parse_args(["--root", str(self.dir), "--files", "sub/b.ts"])
+        self.assertEqual(make_context(args).walker.all_files(), ["sub/b.ts"])
+        args = build_parser("test").parse_args(["--root", str(self.dir / "sub"), "--files", str(self.dir / "a.ts")])
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(io.StringIO()):
+            make_context(args)
+        self.assertEqual(cm.exception.code, EXIT_USAGE)
+
 
 if __name__ == "__main__":
     unittest.main()

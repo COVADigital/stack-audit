@@ -1,4 +1,4 @@
-# Security — 20 Concepts (Frontend / Web)
+# Security — 23 Concepts (Frontend / Web)
 
 > **Applies to:** Next.js 16.x · React 19.2+ · Zod 4 · Tailwind CSS 4 · Drizzle · Better Auth. Other libraries follow the same patterns.  
 > **Rule IDs:** section `NN` in this file is rule `sec.NN` in audit findings.  
@@ -314,6 +314,34 @@ const res = await fetch(target, { redirect: 'error', signal: AbortSignal.timeout
 
 ---
 
+## 22. Open Redirects
+**What:** A `?next=`, `?returnTo=` or `?callbackUrl=` parameter sends the user wherever the link says. Attackers use your trusted domain to bounce victims to a phishing page, or to leak OAuth codes.
+
+```ts
+// ❌ redirect(searchParams.next)  ·  NextResponse.redirect(new URL(req.nextUrl.searchParams.get('to')!))
+// ✅ accept only same-site relative paths
+function safeNext(next: string | undefined) {
+  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/';
+}
+redirect(safeNext((await searchParams).next));
+```
+**Rule:** Never redirect to a URL taken from the request. Accept only relative paths (not `//` or `/\`), or map an ID to an allow-listed destination.
+
+---
+
+## 23. Secure Randomness
+**What:** `Math.random()` is predictable. Tokens, IDs in URLs, reset codes, nonces and invite codes made with it can be guessed.
+
+```ts
+// ❌ const token = Math.random().toString(36).slice(2);
+// ✅
+const token = crypto.randomUUID();                                      // Web Crypto, Node 19+ global
+const code = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
+```
+**Rule:** Use `crypto.randomUUID()` / `crypto.getRandomValues()` (or `node:crypto` `randomBytes`) for any value that must not be guessed. Keep `Math.random()` for jitter, animation and sampling only.
+
+---
+
 ## OWASP mapping
 
 Each section links to the OWASP Cheat Sheet Series for depth (use the `owasp-security` skill to read the relevant section):
@@ -341,3 +369,5 @@ Each section links to the OWASP Cheat Sheet Series for depth (use the `owasp-sec
 | 19 | HTTP_Headers |
 | 20 | Third_Party_Javascript_Management |
 | 21 | Server_Side_Request_Forgery_Prevention |
+| 22 | Unvalidated_Redirects_and_Forwards |
+| 23 | Cryptographic_Storage |

@@ -23,6 +23,8 @@ def build_parser(description: str) -> argparse.ArgumentParser:
     p.add_argument("--root", default=".", help="Repository root to audit (default: current directory)")
     p.add_argument("--changed", action="store_true", help="Only audit files changed vs --base (git)")
     p.add_argument("--base", default=None, help="Base ref for --changed (default: origin/HEAD, origin/main, main)")
+    p.add_argument("--files", nargs="+", default=None, metavar="PATH",
+                   help="Only audit these files (relative to --root, or absolute inside it)")
     p.add_argument("--format", choices=("md", "json", "sarif"), default="md", help="Output format (default: md)")
     p.add_argument("--out", default=None, help="Write report to this file instead of stdout")
     p.add_argument("--strict", action="store_true", help="Exit 1 if error-severity findings remain")
@@ -44,8 +46,21 @@ class Context:
             ignore_paths=self.config.get("ignorePaths", []),
             changed_only=args.changed,
             base=args.base,
+            only=self._only(args.files),
         )
         self.suppressor = Suppressor(self.root, self.config)
+
+    def _only(self, files: list[str] | None) -> list[str] | None:
+        if files is None:
+            return None
+        out = []
+        for f in files:
+            p = Path(f) if Path(f).is_absolute() else self.root / f
+            try:
+                out.append(p.resolve().relative_to(self.root).as_posix())
+            except ValueError:
+                raise ConfigError(f"--files: {f} is outside --root {self.root}") from None
+        return out
 
 
 def make_context(args: argparse.Namespace) -> Context:

@@ -32,7 +32,8 @@
     "csec": {
       "01": ["auto", "error", ["Secrets_Management"]], "02": ["auto", "info", ["Docker_Security", "Secrets_Management"]],
       "03": ["auto", "error", ["Docker_Security"]], "04": ["auto", "error", ["Docker_Security"]],
-      "05": ["auto", "error", ["Docker_Security"]], "06": ["auto", "warn", ["Docker_Security"]]
+      "05": ["auto", "error", ["Docker_Security"]], "06": ["auto", "warn", ["Docker_Security"]],
+      "07": ["auto", "error", ["Database_Security"]]
     },
     "host": {
       "01": ["live", "info", ["Docker_Security"]], "02": ["live", "error", ["Docker_Security"]],

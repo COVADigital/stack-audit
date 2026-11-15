@@ -37,7 +37,7 @@
       "01": ["live", "warn"], "02": ["auto", "warn"], "03": ["live", "warn"], "04": ["auto", "warn"],
       "05": ["live", "warn"], "06": ["auto", "warn"], "07": ["auto", "warn"], "08": ["auto", "info"],
       "09": ["auto", "info"], "10": ["auto", "warn"], "11": ["build", "warn"], "12": ["manual", "info"],
-      "13": ["live", "warn"], "14": ["heuristic", "info"], "15": ["heuristic", "info"], "16": ["heuristic", "info"],
+      "13": ["live", "warn"], "14": ["heuristic", "info"], "15": ["heuristic", "info"], "16": ["manual", "info"],
       "17": ["manual", "info"], "18": ["build", "error"], "19": ["auto", "warn"], "20": ["auto", "warn"]
     },
     "state": {
@@ -53,7 +53,7 @@
       "09": ["heuristic", "warn"], "10": ["manual", "info"], "11": ["auto", "warn"], "12": ["heuristic", "warn"],
       "13": ["manual", "info"], "14": ["auto", "error", ["HTTP_Headers"]], "15": ["heuristic", "warn", ["Denial_of_Service", "Bot_Management_and_Anti-Automation"]], "16": ["manual", "info"],
       "17": ["heuristic", "warn", ["Error_Handling"]], "18": ["auto", "warn"], "19": ["heuristic", "warn", ["REST_Security", "Input_Validation"]], "20": ["live", "info"],
-      "21": ["heuristic", "warn", ["Nextjs_Security", "Authorization"]]
+      "21": ["manual", "info", ["Nextjs_Security", "Authorization"]]
     },
     "cache": {
       "01": ["live", "warn"], "02": ["auto", "info"], "03": ["auto", "info"], "04": ["manual", "info"],
@@ -65,9 +65,9 @@
     },
     "arch": {
       "01": ["auto", "info"], "02": ["auto", "warn"], "03": ["auto", "warn"], "04": ["manual", "info"],
-      "05": ["manual", "info"], "06": ["manual", "info"], "07": ["auto", "info"], "08": ["auto", "warn"],
+      "05": ["manual", "info"], "06": ["manual", "info"], "07": ["manual", "info"], "08": ["auto", "warn"],
       "09": ["heuristic", "info"], "10": ["manual", "info"], "11": ["manual", "info"], "12": ["manual", "info"],
-      "13": ["heuristic", "info"], "14": ["heuristic", "info"], "15": ["heuristic", "warn"], "16": ["heuristic", "warn"],
+      "13": ["manual", "info"], "14": ["heuristic", "info"], "15": ["manual", "info"], "16": ["heuristic", "warn"],
       "17": ["auto", "info"], "18": ["auto", "error"], "19": ["manual", "info"], "20": ["auto", "warn"],
       "21": ["heuristic", "warn", ["Nextjs_Security"]]
     },
@@ -89,10 +89,12 @@
       "15": ["auto", "warn", ["HTTP_Headers"]],
       "16": ["auto", "error", ["Secrets_Management", "Nextjs_Security"]],
       "17": ["heuristic", "error", ["Authentication", "Authorization", "Insecure_Direct_Object_Reference_Prevention"]],
-      "18": ["heuristic", "warn", ["Session_Management"]],
+      "18": ["manual", "info", ["Session_Management"]],
       "19": ["auto", "warn", ["HTTP_Headers"]],
       "20": ["auto", "info", ["Third_Party_Javascript_Management"]],
-      "21": ["heuristic", "warn", ["Server_Side_Request_Forgery_Prevention"]]
+      "21": ["heuristic", "warn", ["Server_Side_Request_Forgery_Prevention"]],
+      "22": ["heuristic", "warn", ["Unvalidated_Redirects_and_Forwards"]],
+      "23": ["heuristic", "warn", ["Cryptographic_Storage"]]
     },
     "a11y": {
       "01": ["auto", "error"], "02": ["manual", "info"], "03": ["auto", "error"], "04": ["manual", "info"],

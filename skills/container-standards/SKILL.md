@@ -6,14 +6,14 @@ allowed-tools: Bash(python ${CLAUDE_PLUGIN_ROOT}/skills/container-standards/scri
 
 # Container Standards
 
-Every **Rule** in `references/` is a requirement. Findings cite rule IDs such as `cnet.02` (section 02 of `12-network-exposure.md`). `references/rule-index.md` lists all 52 rules and how each one is checked.
+Every **Rule** in `references/` is a requirement. Findings cite rule IDs such as `cnet.02` (section 02 of `12-network-exposure.md`). `references/rule-index.md` lists all 53 rules and how each one is checked.
 
 | Prefix | Reference | Covers |
 |---|---|---|
 | `img` | 10-image-build.md | base pinning, non-root USER, ADD, curl\|sh, multi-stage, exec form, healthcheck, CRLF, Next.js standalone |
 | `run` | 11-runtime-hardening.md | Docker socket, capabilities, privileged, no-new-privileges, host namespaces, limits, read-only, mounts |
 | `cnet` | 12-network-exposure.md | internal networks, **ports published past UFW**, proxy routing |
-| `csec` | 13-secrets.md | literal secrets, Compose secrets/`_FILE`, build secrets, ARG/ENV, copied key files, .dockerignore |
+| `csec` | 13-secrets.md | literal secrets, Compose secrets/`_FILE`, build secrets, ARG/ENV, copied key files, .dockerignore, database auth switched off |
 | `host` | 14-host-daemon.md | engine/kernel updates, TCP socket, log rotation, daemon defaults, rootless, firewall |
 | `sup` | 15-supply-chain.md | scanning, hadolint, SBOM/provenance, signing, base-image updates |
 | `ops` | 16-data-ops.md | volumes, backups, healthchecks, restart, log rotation, `version:`, graceful shutdown |
@@ -27,7 +27,7 @@ Every **Rule** in `references/` is a requirement. Findings cite rule IDs such as
 python $S/run_audit.py --root <repo> --phase build --format json     # Dockerfiles + compose files (static)
 python $S/run_audit.py --root <repo> --phase deploy                  # + running containers via docker inspect (local daemon)
 python $S/audit_dockerfile.py --root <repo>                          # img.*, csec.03–06, sup.05
-python $S/audit_compose.py    --root <repo> [--daemon-rotation]      # run.*, cnet.*, csec.01–03, ops.*, cool.*
+python $S/audit_compose.py    --root <repo> [--daemon-rotation]      # run.*, cnet.*, csec.01–03, csec.07, ops.*, cool.*
 python $S/audit_runtime.py    [--all]                                # the same rules on real containers
 python $S/scan_image.py --dockerfile <path> | --image <name:tag>     # hadolint / trivy / grype if installed
 python3 audit_host.py                                                # ON THE LINUX SERVER, run by the user

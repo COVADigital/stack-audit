@@ -127,14 +127,86 @@ await db.execute(sql.raw(userInput));
 await client.query(`SELECT * FROM users WHERE email = '${email}'`);
 const q = "SELECT * FROM t WHERE id = " + id;
 exec(`convert ${file} out.png`);
+await db.$queryRawUnsafe(`SELECT * FROM users WHERE id = ${id}`);
+await prisma.$executeRawUnsafe(`DELETE FROM t WHERE id = ${id}`);
 """)
         self.write("lib/good.ts", """
 await db.execute(sql`SELECT * FROM users WHERE email = ${email}`);
 await db.select().from(users).where(eq(users.email, email));
 """)
         d = self.run_audit()
-        self.assertEqual(len(self.messages(d, "sec.10")), 4)
+        self.assertEqual(len(self.messages(d, "sec.10")), 6)
         self.assertNotIn("sec.10", self.rules_in(d, "good.ts"))
+
+    def test_ssrf(self):
+        self.write("app/api/proxy/route.ts", """
+export async function GET(req: Request) {
+  const url = new URL(req.url).searchParams.get('target');
+  return fetch(url);
+}""")
+        self.write("app/api/safe/route.ts", """
+const ALLOWED = new Set(['api.example.com']);
+export async function GET(req: Request) {
+  const url = new URL(new URL(req.url).searchParams.get('target'));
+  if (!ALLOWED.has(url.hostname)) return new Response(null, { status: 400 });
+  return fetch(url);
+}""")
+        d = self.run_audit()
+        self.assertIn("sec.21", self.rules_in(d, "proxy/route.ts"))
+        self.assertNotIn("sec.21", self.rules_in(d, "safe/route.ts"))
+
+    def test_open_redirect(self):
+        self.write("app/login/page.tsx", """
+import { redirect } from 'next/navigation';
+export default async function Page({ searchParams }) {
+  const { next } = await searchParams;
+  if (next) redirect(next);
+}""")
+        self.write("app/api/leave/route.ts", """
+export function GET(req) {
+  return NextResponse.redirect(new URL(req.nextUrl.searchParams.get('to')));
+}""")
+        self.write("app/ok/page.tsx", """
+export default async function Page({ searchParams }) {
+  const { next } = await searchParams;
+  redirect(`/posts/${next}`);
+  redirect('/login');
+}""")
+        self.write("app/guarded/page.tsx", """
+const safeNext = (n) => (n?.startsWith('/') && !n.startsWith('//') ? n : '/');
+export default async function Page({ searchParams }) {
+  const { next } = await searchParams;
+  redirect(safeNext(next));
+}""")
+        d = self.run_audit()
+        self.assertIn("sec.22", self.rules_in(d, "login/page.tsx"))
+        self.assertIn("sec.22", self.rules_in(d, "leave/route.ts"))
+        self.assertNotIn("sec.22", self.rules_in(d, "ok/page.tsx"))
+        self.assertNotIn("sec.22", self.rules_in(d, "guarded/page.tsx"))
+
+    def test_weak_random(self):
+        self.write("lib/bad.ts", """
+const resetToken = Math.random().toString(36).slice(2);
+export function makeInviteCode() { return Math.random().toString(36); }
+""")
+        self.write("lib/good.ts", """
+const delay = base * (0.5 + Math.random());
+export function shuffle(a) { return a.sort(() => Math.random() - 0.5); }
+const token = crypto.randomUUID();
+""")
+        d = self.run_audit()
+        self.assertEqual(len([f for f in d["findings"] if f["rule"] == "sec.23" and "bad.ts" in f["file"]]), 2)
+        self.assertNotIn("sec.23", self.rules_in(d, "good.ts"))
+
+    def test_lockfile_and_ci_install(self):
+        self.write(".github/workflows/ci.yml", "jobs:\n  t:\n    steps:\n      - run: npm install\n")
+        d = self.run_audit()
+        msgs = self.messages(d, "sec.11")
+        self.assertTrue(any("No lockfile" in m for m in msgs), msgs)
+        self.assertTrue(any("frozen lockfile" in m for m in msgs), msgs)
+        self.write("package-lock.json", "{}")
+        self.write(".github/workflows/ci.yml", "jobs:\n  t:\n    steps:\n      - run: npm ci\n")
+        self.assertEqual(self.messages(self.run_audit(), "sec.11"), [])
 
     def test_secrets(self):
         self.write("app/client.tsx", """'use client';

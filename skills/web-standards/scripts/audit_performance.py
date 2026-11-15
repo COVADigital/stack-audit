@@ -194,7 +194,6 @@ class PerformanceAudit(Audit):
             self.build_budget()
             ran.add("build")
         self.finish_not_checked(ran)
-        self.report.not_checked.append("`perf.16` long-list virtualization (check lists that can exceed ~200 rows)")
 
 
 if __name__ == "__main__":

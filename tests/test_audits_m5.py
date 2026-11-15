@@ -153,6 +153,13 @@ export function L() {
         self.assertFalse(any("`ok`" in m for m in s11))
         self.assertEqual(len(self.msgs(d, "state.17")), 2)
 
+    def test_persist_without_version(self):
+        self.write("app/store.ts", """
+export const a = create(persist((set) => ({}), { name: 'cart' }));
+export const b = create(persist((set) => ({}), { name: 'prefs', version: 2, migrate }));
+""")
+        self.assertEqual(len(self.msgs(self.run_audit(), "state.18")), 1)
+
 
 class PerformanceTests(Case):
     script = "audit_performance.py"

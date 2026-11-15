@@ -109,12 +109,14 @@ class Walker:
         ignore_paths: list[str] | None = None,
         changed_only: bool = False,
         base: str | None = None,
+        only: list[str] | None = None,
     ) -> None:
         self.root = Path(root).resolve()
         self.ignore_paths = list(ignore_paths or [])
         self.git = is_git_repo(self.root)
         self.changed_only = changed_only
         self.base = base
+        self.only = set(only) if only is not None else None  # root-relative posix paths (--files)
         self.notes: list[str] = []
         # A folder ignored by an enclosing repo would list zero files via ls-files: walk it instead.
         if self.git and run_git(self.root, "check-ignore", "-q", ".") is not None:
@@ -176,6 +178,8 @@ class Walker:
                 files = [f for f in files if f in changed]
         elif self.changed_only:
             self.notes.append("--changed: not a git repo; scanning all files")
+        if self.only is not None:
+            files = [f for f in files if f in self.only]
         self._files = sorted(files)
         return self._files
 

@@ -194,7 +194,7 @@ services:
         d = self.run_script("audit_compose.py")
         rules = self.rules(d)
         for r in ("ops.06", "img.01", "cnet.02", "cnet.03", "csec.01", "csec.03", "run.01", "run.03", "run.05", "run.08",
-                  "run.09", "run.06", "run.04", "ops.01", "ops.03", "ops.04", "ops.05", "cnet.01"):
+                  "run.09", "run.06", "run.04", "ops.01", "ops.03", "ops.04", "ops.05", "ops.07", "cnet.01", "csec.02"):
             self.assertIn(r, rules, r)
         self.assertTrue(all("hunter2" not in f["message"] for f in d["findings"]))  # values never printed
 
@@ -214,6 +214,35 @@ services:
         self.assertEqual(len(hits), 1, hits)
         self.assertIn("3000:3000", hits[0]["message"])
         self.assertEqual(hits[0]["severity"], "warn")
+
+    def test_coolify_app_port_bypasses_proxy(self):
+        self.write("compose.yaml", 'services:\n  app:\n    image: app:1.2\n    environment: { SERVICE_FQDN_APP: x }\n    ports: ["3000:3000"]\n')
+        d = self.run_script("audit_compose.py")
+        self.assertIn("cool.01", self.rules(d))
+        self.assertNotIn("cnet.03", self.rules(d))
+
+    def test_docker_api_port_and_disabled_db_auth(self):
+        self.write("compose.yaml", """services:
+  dind:
+    image: docker:27-dind
+    ports: ["2375:2375", "127.0.0.1:2376:2376"]
+  pg:
+    image: postgres:17
+    environment: { POSTGRES_HOST_AUTH_METHOD: trust }
+  my:
+    image: mysql:8.4
+    environment: { MYSQL_ALLOW_EMPTY_PASSWORD: "yes", MYSQL_ROOT_PASSWORD: "${DB_PW:?}" }
+  ok:
+    image: mariadb:11
+    environment: { MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "no", POSTGRES_HOST_AUTH_METHOD: scram-sha-256 }
+""")
+        self.write("compose.dev.yaml", "services:\n  pg:\n    image: postgres:17\n    environment: { POSTGRES_HOST_AUTH_METHOD: trust }\n")
+        d = self.run_script("audit_compose.py")
+        api = [f for f in d["findings"] if "Docker Engine API" in f["message"]]
+        self.assertEqual([(f["rule"], f["severity"]) for f in api], [("cnet.02", "error")])  # 127.0.0.1 binding is fine
+        auth = [(f["file"], f["severity"], f["message"].split("`")[1]) for f in d["findings"] if f["rule"] == "csec.07"]
+        self.assertEqual(sorted(auth), [("compose.dev.yaml", "info", "pg"), ("compose.yaml", "error", "my"),
+                                        ("compose.yaml", "error", "pg")])
 
     def test_dev_file_relaxed_and_platform_allowlist(self):
         self.write("compose.dev.yaml", """services:

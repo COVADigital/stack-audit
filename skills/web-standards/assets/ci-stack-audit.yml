@@ -1,0 +1,58 @@
+# .github/workflows/stack-audit.yml
+# Runs the stack-audit scripts (Python standard library only, no network) on every PR, shows findings
+# in GitHub code scanning, and fails the job on error-level findings.
+# Before use: replace <stack-audit-commit-sha> with a full commit SHA from github.com/COVADigital/stack-audit.
+# Delete the container step if the repo has no Dockerfile or Compose file.
+name: stack-audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: COVADigital/stack-audit
+          ref: <stack-audit-commit-sha>
+          path: stack-audit
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.x"
+      - name: Audit
+        run: |
+          status=0
+          python stack-audit/skills/web-standards/scripts/run_audit.py --root app --phase review \
+            --format sarif --out web.sarif --strict || status=1
+          python stack-audit/skills/container-standards/scripts/run_audit.py --root app --phase build \
+            --format sarif --out containers.sarif --strict || status=1
+          exit $status
+      - name: Upload web findings
+        if: always() && hashFiles('web.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: web.sarif
+          category: stack-audit-web
+          checkout_path: app
+      - name: Upload container findings
+        if: always() && hashFiles('containers.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: containers.sarif
+          category: stack-audit-containers
+          checkout_path: app

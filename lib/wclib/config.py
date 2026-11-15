@@ -26,6 +26,7 @@ DEFAULTS: dict = {
     "asvs": {"level": None},  # None = infer (L1 content sites, L2 accounts/payments/admin)
     "containers": {"platformAllowlist": ["coolify", "coolify-proxy", "coolify-realtime", "coolify-db", "coolify-redis"]},
     "owasp": {"cheatsheetsPath": None, "autoUpdate": False},  # path None = ~/.claude/data/owasp-cheatsheets
+    "hooks": {"onEdit": True},  # PostToolUse check of each file Claude edits
     "ignorePaths": [],
     "ignore": {},  # { "sec.01": ["src/legacy/**"] }
 }

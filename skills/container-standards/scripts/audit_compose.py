@@ -10,7 +10,7 @@ or secret files, so no secret values are loaded. Reports variable names only.
 from __future__ import annotations
 
 import re
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 import _bootstrap  # noqa: F401
 from wclib.audit import Audit, run_main
@@ -21,6 +21,7 @@ from wclib.walker import repo_paths
 from wclib.yamlish import YamlError, load
 
 DANGEROUS_CAPS = {"SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "SYS_MODULE", "DAC_READ_SEARCH", "SYS_RAWIO", "ALL", "BPF", "PERFMON"}
+NO_AUTH_FLAGS = {"MYSQL_ALLOW_EMPTY_PASSWORD", "MARIADB_ALLOW_EMPTY_ROOT_PASSWORD", "MARIADB_ALLOW_EMPTY_PASSWORD", "ALLOW_EMPTY_PASSWORD"}
 ONE_SHOT = re.compile(r"migrat|seed|setup|init|bootstrap|backup|restore|job|task|cron|once", re.I)
 
 
@@ -36,13 +37,22 @@ class ComposeAudit(Audit):
 
     def compose_files(self) -> list[tuple[str, str]]:
         seen, out = set(), []
+        only = self.ctx.walker.only  # --files
         for base in repo_paths(self.root):
             for p in sorted(base.glob("*.y*ml")) + sorted(base.glob("*/*.y*ml")):
                 rel = p.relative_to(self.root).as_posix() if base == self.root else p.relative_to(base).as_posix()
+                if only is not None and not self._in_only(p, only):
+                    continue
                 if COMPOSE_RE.search(p.name) and p.resolve() not in seen and "node_modules" not in p.parts:
                     seen.add(p.resolve())
                     out.append((rel, p.read_text(encoding="utf-8", errors="replace")))
         return out
+
+    def _in_only(self, p: Path, only: set[str]) -> bool:
+        try:
+            return p.resolve().relative_to(self.root).as_posix() in only
+        except ValueError:  # compose file at the git toplevel, outside --root
+            return False
 
     def file_add(self, rel, lines, path, rule, msg, **kw):
         line = None
@@ -161,7 +171,10 @@ class ComposeAudit(Audit):
                 if not pub or not pub.all_interfaces:
                     continue
                 pp = sp + ("ports", pi)
-                if kind in ("db", "admin"):
+                if str(pub.container_port) in ("2375", "2376"):
+                    add(pp, "cnet.02", f"`{name}` publishes the Docker Engine API ({pub.raw}) on ALL interfaces: anyone who reaches it controls the host",
+                        fix_hint="Remove the published port; reach the API over the internal network or an SSH tunnel")
+                elif kind in ("db", "admin"):
                     add(pp, "cnet.02", f"`{name}` publishes {pub.raw} on ALL interfaces: Docker bypasses UFW, so this is internet-reachable",
                         fix_hint=f"\"127.0.0.1:{pub.host_port or pub.container_port}:{pub.container_port}\" or remove the published port")
                 elif kind == "app" and has_proxy:
@@ -190,6 +203,13 @@ class ComposeAudit(Audit):
                 else:
                     add(sp + ("environment", k), "csec.01", f"`{name}` has a literal secret value for `{k}` (value not shown)",
                         fix_hint="Use ${VAR:?} from an untracked env file / platform secret store, or Compose secrets")
+            for k, v in env_items(svc.get("environment")):
+                v = str(v or "").strip().lower()
+                if (k == "POSTGRES_HOST_AUTH_METHOD" and v == "trust") or \
+                        (k in NO_AUTH_FLAGS and v not in ("", "no", "false", "0") and not is_interpolated(v)):
+                    add(sp + ("environment", k), "csec.07", f"`{name}` disables database authentication ({k})",
+                        severity="info" if is_dev else None,
+                        fix_hint="Set a password (POSTGRES_PASSWORD_FILE / Compose secrets); a throwaway one is fine in dev")
             env_names = {k for k, _ in env_items(svc.get("environment"))}
             if kind == "db" and not override_only and any(n in env_names for n in ("POSTGRES_PASSWORD", "MYSQL_PASSWORD", "MYSQL_ROOT_PASSWORD", "MARIADB_PASSWORD", "MONGO_INITDB_ROOT_PASSWORD")) \
                     and not is_dev:

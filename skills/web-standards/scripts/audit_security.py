@@ -46,6 +46,13 @@ HARD_SECRETS = [
 ]
 SECRET_SCAN_EXTS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".yml", ".yaml", ".toml", ".env", ".sh", ".py"}
 RATE_LIMIT_HINT = re.compile(r"ratelimit|rateLimit|rate_limit|limiter|Ratelimit", re.I)
+REDIRECT_CALL = r"(?:(?<![\w$.])(?:redirect|permanentRedirect)|\b(?:NextResponse|Response)\.redirect|\blocation\.(?:assign|replace))"
+REQUEST_SOURCE = re.compile(r"searchParams|nextUrl|formData\(|req\.url|request\.url|req\.query|useSearchParams")
+REDIRECT_TARGET = re.compile(r"searchParams\.get\(|\b(next|returnTo|returnUrl|redirectTo|redirectUrl|redirect_uri|callbackUrl|"
+                             r"continue|dest|destination|target|goto)\b")
+REDIRECT_GUARD = re.compile(r"safe|isRelative|isLocal|startsWith\(\s*['\"]/|allow(ed)?(List|Hosts?|Origins?)|ALLOWED|"
+                            r"\.origin\s*[!=]==|\.host(name)?\s*[!=]==", re.I)
+SECRET_VALUE_NAME = re.compile(r"token|secret|nonce|salt|otp|passw|api_?key|session_?id|reset|invite|csrf|verif", re.I)
 
 
 class SecurityAudit:
@@ -130,6 +137,30 @@ class SecurityAudit:
                          f, fn.start, confidence="low",
                          fix_hint="Allow-list hosts/schemes, refuse redirects, block private IP ranges, set a timeout")
 
+    # ------------------------------------------------------------- sec.22 open redirects
+    def open_redirects(self, f: JsFile) -> None:
+        if not REQUEST_SOURCE.search(f.code) or REDIRECT_GUARD.search(f.code):
+            return
+        hits = [(off, a) for off, a in find_calls(f, REDIRECT_CALL)]
+        hits += [(m.start(), m.group(1)) for m in re.finditer(r"\blocation\.href\s*=(?!=)\s*([^;\n]+)", f.code)]
+        for off, args in hits:
+            # A literal or template that starts with "/" (not "//") stays on this site.
+            if re.match(r"\s*(?:new URL\(\s*)?['\"`]/(?!/)", args) or not REDIRECT_TARGET.search(args):
+                continue
+            self.add("sec.22", "Redirect target comes from the request without a same-site check (open redirect)", f, off,
+                     confidence="low", fix_hint="Allow only relative paths starting with a single '/', or map to an allow-list")
+
+    # ------------------------------------------------------------- sec.23 predictable random values
+    def weak_random(self, f: JsFile) -> None:
+        funcs = functions(f)
+        for m in re.finditer(r"\bMath\.random\s*\(", f.code_nostr):
+            line_start = f.code.rfind("\n", 0, m.start()) + 1
+            stmt = f.code[line_start:m.start()]
+            fn = next((fn for fn in funcs if fn.body_start <= m.start() < fn.body_end), None)
+            if SECRET_VALUE_NAME.search(stmt) or (fn and SECRET_VALUE_NAME.search(fn.name)):
+                self.add("sec.23", "Math.random() used for a value that must not be guessable", f, m.start(), confidence="medium",
+                         fix_hint="crypto.randomUUID() or crypto.getRandomValues() (node:crypto randomBytes on the server)")
+
     # ------------------------------------------------------------- sec.06 / sec.07 cookies & storage
     def cookies_and_storage(self, f: JsFile) -> None:
         # Also `const store = await cookies(); store.set(...)` (the usual Next 15+/16 form).
@@ -189,7 +220,7 @@ class SecurityAudit:
             if not re.fullmatch(r"\s*(['\"])[^'\"]*\1\s*", args):
                 self.add("sec.10", "sql.raw() with a non-literal argument", f, off,
                          fix_hint="Use the sql`` tag (parameterized) or an allow-listed identifier")
-        for m in re.finditer(r"\b(?:query|execute|\$queryRawUnsafe|\$executeRawUnsafe|unsafe)\s*\(\s*`([^`]*\$\{[^`]*)`", f.code):
+        for m in re.finditer(r"(?<![\w$])(?:query|execute|\$queryRawUnsafe|\$executeRawUnsafe|unsafe)\s*\(\s*`([^`]*\$\{[^`]*)`", f.code):
             if re.search(r"\b(select|insert|update|delete|where|from)\b", m.group(1), re.I):
                 self.add("sec.10", "SQL built with template-string interpolation", f, m.start(), confidence="medium",
                          fix_hint="Use parameterized queries (Drizzle sql`` tag / query builder)")
@@ -391,6 +422,8 @@ class SecurityAudit:
             self.injection(f)
             self.cors(f)
             self.secrets_in_code(f)
+            self.open_redirects(f)
+            self.weak_random(f)
             third_party += self.markup(f)
         for f in self.html_files:
             self.xss(f)

@@ -14,8 +14,8 @@ It gives Claude three skills, each with written standards, audit scripts that sc
 
 | Skill | Covers | Use it for |
 |---|---|---|
-| `web-standards` | React / Next.js: rendering, performance, state, networking, caching, architecture, security, accessibility and i18n, git hygiene. 177 rules, tuned for Next.js 16 and React 19. | Reviewing a file or PR, planning a page's rendering and caching, a pre-launch audit |
-| `container-standards` | Dockerfiles, Compose stacks, networks, published ports, secrets, volumes, Docker hosts, Coolify. 52 rules. | Reviewing a Dockerfile or Compose file, hardening a stack before deploy |
+| `web-standards` | React / Next.js: rendering, performance, state, networking, caching, architecture, security, accessibility and i18n, git hygiene. 179 rules, tuned for Next.js 16 and React 19. | Reviewing a file or PR, planning a page's rendering and caching, a pre-launch audit |
+| `container-standards` | Dockerfiles, Compose stacks, networks, published ports, secrets, volumes, Docker hosts, Coolify. 53 rules. | Reviewing a Dockerfile or Compose file, hardening a stack before deploy |
 | `owasp-security` | The OWASP Cheat Sheet Series, ASVS 5.0 and the OWASP Top 10, from a local copy. | "What does OWASP recommend for X", citations for a security doc, an ASVS self-assessment |
 
 ## What you can ask
@@ -92,6 +92,7 @@ You can always update by hand with `git -C ~/.claude/data/owasp-cheatsheets pull
 ## How it works
 
 - **A start-up hook** tells Claude when to load each skill, so a question like "review this file" uses the standards instead of an answer from memory.
+- **An edit hook** checks each file Claude writes or edits (TypeScript/JavaScript, Dockerfiles, Compose files) for error-level security findings, such as XSS sinks, hard-coded secrets, raw SQL or a privileged container. It tells Claude straight away so the fix happens while the file is open. It runs offline in well under a second and says nothing when the file is clean. Turn it off with `STACK_AUDIT_ON_EDIT=0` or `{ "hooks": { "onEdit": false } }` in `stack-audit.config.json`.
 - **Each skill is a `SKILL.md`** with reference files Claude reads only when it needs them. Findings cite rule IDs such as `sec.16`, which map to a section in the references.
 - **Audit scripts** do the mechanical scanning and report `file:line` findings with a severity, a fix hint and the rule ID.
 - **Missing scanners are offered, never installed silently.** Some checks use outside tools (hadolint, trivy, grype, gitleaks). If one isn't installed, Claude asks whether to run it once from its official container image, install it system-wide, or skip that check.
@@ -102,7 +103,7 @@ You can always update by hand with `git -C ~/.claude/data/owasp-cheatsheets pull
 
 - The audit scripts never modify the project they scan and never install anything.
 - They make no network calls unless you pass an explicit flag: `--url` (probe a deployed site's headers), `--audit` (npm audit), `--remote` (GitHub settings) or `--image` (image vulnerability scan).
-- The start-up hook only reads local files, unless you have turned on automatic cheat sheet updates.
+- The start-up hook only reads local files, unless you have turned on automatic cheat sheet updates. The edit hook only reads the file that was edited and the project's config.
 - The Compose audit never reads env files or secret files, and never prints secret values.
 - Claude asks before running anything that contacts an external service.
 
@@ -129,7 +130,7 @@ python skills/owasp-security/scripts/verify_citations.py docs/security.md
 
 Conventions shared by every audit script:
 
-- Options: `--root`, `--changed [--base REF]`, `--format md|json|sarif`, `--out FILE`, `--strict`, `--config FILE`
+- Options: `--root`, `--changed [--base REF]`, `--files PATH...` (individual audit scripts, not `run_audit.py`), `--format md|json|sarif`, `--out FILE`, `--strict`, `--config FILE`
 - Exit codes: `0` ran (findings may exist) · `1` `--strict` and error findings remain · `2` usage or config error
 - Findings: `rule` (for example `sec.16`), `severity` (error/warn/info), `confidence` (high/medium/low), `file:line`, `fix_hint`, `ref`, `owasp`
 
@@ -153,7 +154,7 @@ Per path, in `stack-audit.config.json` at the project root:
 
 Each skill ships starting points Claude can adapt, in `skills/<name>/assets/`:
 
-- **web-standards:** security headers for `next.config.ts`, a CSP proxy with nonces, `.gitignore`, Dependabot, pre-commit secret scanning, Lighthouse CI, an axe accessibility test, an ADR template.
+- **web-standards:** security headers for `next.config.ts`, a CSP proxy with nonces, `.gitignore`, Dependabot, pre-commit secret scanning, Lighthouse CI, an axe accessibility test, an ADR template, and a GitHub Actions workflow that runs these audits on every PR and shows the findings in code scanning (`ci-stack-audit.yml`).
 - **container-standards:** Dockerfiles for Next.js standalone and for a Node service, a hardened Compose file, `.dockerignore`, `daemon.json` with log rotation, a CI image-scan workflow.
 
 ## What has been measured
@@ -171,7 +172,7 @@ The test cases are in `skills/<name>/evals/`.
 ```text
 .claude-plugin/              plugin and marketplace manifests
 assets/                      banner, icon and social preview images
-hooks/                       SessionStart hook: when to load each skill, cheat sheet setup and update checks
+hooks/                       SessionStart hook (when to load each skill, cheat sheet checks) and the edit hook
 lib/wclib/                   shared Python library (stdlib only), used by all skills
 scripts/                     shared CLIs (stack_profile.py)
 skills/<name>/               SKILL.md, references/, scripts/, assets/, evals/

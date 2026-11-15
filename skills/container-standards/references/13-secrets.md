@@ -1,4 +1,4 @@
-# Container Secrets — 6 Practices
+# Container Secrets — 7 Practices
 
 > **Applies to:** Dockerfiles, BuildKit, Docker Compose runtime and build secrets.  
 > **Rule IDs:** section `NN` in this file is rule `csec.NN` in audit findings.  
@@ -84,8 +84,24 @@ node_modules
 
 ---
 
+## 07. Never Disable Database Authentication
+**What:** Image switches that turn off the password check: `POSTGRES_HOST_AUTH_METHOD: trust`, `MYSQL_ALLOW_EMPTY_PASSWORD`, `MARIADB_ALLOW_EMPTY_ROOT_PASSWORD`, Bitnami's `ALLOW_EMPTY_PASSWORD`.
+**Why:** Anything that can reach the port gets in: another container on the network, a port published by mistake, or an SSRF in the app.
+
+```yaml
+db:
+  image: postgres:17-alpine
+  environment:
+    POSTGRES_PASSWORD_FILE: /run/secrets/db_password   # ✅ not POSTGRES_HOST_AUTH_METHOD: trust
+  secrets: [db_password]
+```
+**Rule:** Databases always require a password, in every environment that is reachable by more than one person. Use a throwaway password in dev rather than disabling authentication.
+
+---
+
 ## OWASP mapping
 
 | § | OWASP cheat sheet(s) |
 |---|---|
 | 01, 02, 03, 04, 05, 06 | Docker_Security, Secrets_Management |
+| 07 | Database_Security |
