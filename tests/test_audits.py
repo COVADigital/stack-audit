@@ -302,6 +302,43 @@ jobs:
         self.assertFalse(any("signing is not enabled" in m for m in self.messages(d, "git.01")))
         self.assertEqual(self.messages(d, "git.10"), [])
 
+    def test_remote_branch_protection(self):
+        import importlib.util
+        from wclib.cli import build_parser, make_context
+        from wclib.findings import Report
+        from wclib.rules import RuleBook
+        sys.path.insert(0, str(SCRIPTS))
+        try:
+            spec = importlib.util.spec_from_file_location("audit_git_under_test", SCRIPTS / "audit_git.py")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        finally:
+            sys.path.remove(str(SCRIPTS))
+        self.init_git()
+        self.git("remote", "add", "origin", "https://github.com/acme/app.git")
+        ctx = make_context(build_parser("t").parse_args(["--root", str(self.dir)]))
+
+        def remote(rules, protection):
+            def fake_gh(*args):  # stands in for the gh CLI: no network, no auth
+                ep = args[1]
+                if ep == "repos/acme/app":
+                    return 0, json.dumps({"default_branch": "main", "delete_branch_on_merge": True})
+                if ep.endswith("/protection"):
+                    return protection
+                if "/rules/branches/" in ep:
+                    return rules
+                return 1, "not found"
+            mod.gh = fake_gh
+            report = Report(tool="t", root=str(self.dir))
+            mod.GitAudit(ctx, RuleBook(SCRIPTS.parent), report).remote()
+            return [f.message for f in report.findings if f.rule == "git.02"]
+
+        self.assertTrue(any("no ruleset or branch protection" in m for m in remote((0, "[]"), (1, "Not Found"))))
+        self.assertTrue(any("Force-pushes" in m for m in remote((0, json.dumps([{"type": "deletion"}])), (1, ""))))
+        protected = json.dumps([{"type": "non_fast_forward"},
+                                {"type": "pull_request", "parameters": {"required_approving_review_count": 1}}])
+        self.assertEqual(remote((0, protected), (1, "")), [])
+
     def test_good_repo(self):
         self.init_git()
         self.write("package.json", PKG)

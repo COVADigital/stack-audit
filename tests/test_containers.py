@@ -305,6 +305,32 @@ class RuntimeAndHostTests(unittest.TestCase):
         self.assertIn(("cool.03", "container:coolify-proxy"), got)
         self.assertNotIn(("run.01", "container:coolify-proxy"), got)
 
+    def test_scanner_output_normalized(self):
+        from unittest import mock
+        import scan_image
+        rb = RuleBook(SKILL)
+        hadolint_out = json.dumps([{"code": "DL3008", "message": "Pin versions", "line": 3, "level": "warning"},
+                                   {"code": "DL3002", "message": "Last USER should not be root", "line": 9, "level": "error"}])
+        report = Report(tool="t", root="x")
+        with mock.patch.object(scan_image.shutil, "which", lambda name: name), \
+                mock.patch.object(scan_image, "run", lambda cmd, timeout=900: (0, hadolint_out, "")):
+            scan_image.hadolint("Dockerfile", rb, report)
+        self.assertEqual([(f.rule, f.severity, f.line) for f in report.findings],
+                         [("sup.02", "info", 3), ("sup.02", "warn", 9)])
+        report = Report(tool="t", root="x")
+        with mock.patch.object(scan_image.shutil, "which", lambda name: None):
+            scan_image.hadolint("Dockerfile", rb, report)
+        self.assertEqual(report.findings, [])
+        self.assertTrue(any("hadolint not installed" in s for s in report.skipped))
+        report = Report(tool="t", root="x")
+        scan_image.summarize("app:1", [("CVE-1", "CRITICAL", "openssl", "3.0", "3.0.1"), ("CVE-2", "HIGH", "zlib", "1.2", "")],
+                             rb, report, "trivy")
+        scan_image.summarize("app:2", [("CVE-3", "HIGH", "zlib", "1.2", "")], rb, report, "trivy")
+        scan_image.summarize("app:3", [], rb, report, "trivy")
+        self.assertEqual([(f.rule, f.severity, f.file) for f in report.findings],
+                         [("sup.01", "error", "image:app:1"), ("sup.01", "warn", "image:app:2")])
+        self.assertIn("1 critical / 1 high", report.findings[0].message)
+
     def test_host_audit_function(self):
         import audit_host
         rb, report = RuleBook(SKILL), Report(tool="t", root="x")

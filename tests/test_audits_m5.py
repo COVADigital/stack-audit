@@ -4,6 +4,7 @@ architecture, probe_headers (local server only) and run_audit."""
 import gzip
 import http.server
 import json
+import shutil
 import subprocess
 import sys
 import threading
@@ -257,6 +258,25 @@ export async function priv() { 'use cache: private'; const c = await cookies(); 
         self.assertIn("cache.03", self.rules(d, "sw.js"))
         self.assertNotIn("cache.02", self.rules(d, "worker.ts"))
         self.assertNotIn("cache.03", self.rules(d, "worker.ts"))
+        self.assertIn("cache.13", self.rules(d, "sw.js"))  # never deletes old caches
+        self.assertNotIn("cache.13", self.rules(d, "worker.ts"))
+
+    def test_manifest_chunk_errors_and_quota(self):
+        self.write("app/layout.tsx", "export default function L({ children }) { return children; }\n")
+        self.write("app/manifest.json", '{"name": "a", "icons": [{"src": "/i.png", "sizes": "192x192"}]}')
+        self.write("app/error.tsx", "'use client';\nexport default function E({ reset }) { return <button onClick={reset}>x</button>; }\n")
+        self.write("lib/db.ts", "export const db = await openDB('app', 1);\n")
+        d = self.run_audit()
+        self.assertEqual(len(self.msgs(d, "cache.10")), 2)  # no 512px icon, no maskable icon
+        self.assertIn("cache.16", self.rules(d, "error.tsx"))
+        self.assertIn("cache.17", self.rules(d, "db.ts"))
+        self.write("app/manifest.json", '{"icons": [{"src": "/i.png", "sizes": "512x512", "purpose": "maskable"}]}')
+        self.write("app/error.tsx", "'use client';\nexport default function E({ error }) {\n"
+                   "  if (error.name === 'ChunkLoadError') location.reload();\n  return null;\n}\n")
+        self.write("lib/db.ts", "try { await openDB('app', 1); } catch (e) { if (e.name === 'QuotaExceededError') prune(); }\n")
+        d = self.run_audit()
+        for r in ("cache.10", "cache.16", "cache.17"):
+            self.assertNotIn(r, self.rules(d), r)
 
 
 class ArchitectureTests(Case):
@@ -306,11 +326,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Cache-Control", "public, max-age=3600")
             self.send_header("Content-Encoding", "gzip")
+        elif self.path.startswith("/api/"):
+            body = b'{"items": []}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
         else:
             body = b"<html><script src=\"/_next/static/chunks/app.js\"></script>" + b"x" * 3000 + b"</html>"
             self.send_response(200)
             self.send_header("Cache-Control", "public, max-age=86400")
             self.send_header("X-Powered-By", "Next.js")
+            self.send_header("Vary", "Cookie")
+            self.send_header("Set-Cookie", "sid=abc; HttpOnly")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -323,14 +349,19 @@ class ProbeAndOrchestratorTests(Case):
         t.start()
         try:
             url = f"http://127.0.0.1:{srv.server_address[1]}/"
-            res = subprocess.run([sys.executable, str(SCRIPTS / "probe_headers.py"), "--url", url, "--format", "json"],
-                                 capture_output=True, text=True, encoding="utf-8", timeout=60)
+            res = subprocess.run([sys.executable, str(SCRIPTS / "probe_headers.py"), "--url", url, "--api", "/api/items",
+                                  "--format", "json"], capture_output=True, text=True, encoding="utf-8", timeout=60)
             d = json.loads(res.stdout)
         finally:
             srv.shutdown()
         rules = {f["rule"] for f in d["findings"]}
-        for r in ("cache.09", "cache.01", "perf.13", "sec.19", "sec.15", "sec.03", "sec.05"):
+        for r in ("cache.09", "cache.01", "perf.13", "sec.19", "sec.15", "sec.03", "sec.05", "net.03"):
             self.assertIn(r, rules, r)
+        c08 = [(f["severity"], f["message"]) for f in d["findings"] if f["rule"] == "cache.08"]
+        self.assertTrue(any("varies on Cookie" in m for _, m in c08), c08)
+        self.assertIn("error", [s for s, m in c08 if "sets a cookie" in m])
+        if shutil.which("curl"):  # net.20 reads the HTTP version with curl; the test server speaks HTTP/1.0
+            self.assertIn("net.20", rules)
         self.assertTrue(any("immutable" in f["message"] for f in d["findings"] if f["rule"] == "cache.01"))
 
     def test_run_audit_merges_domains(self):
