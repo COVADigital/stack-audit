@@ -3,4 +3,5 @@ name: asvs-requirement-citation
 expected_outcome: |
   Identifies the ASVS 5.0 requirement(s) for cookie Secure / __Host- prefixes (V3.3.1, Level 1) from read_requirement.py
   or find_sheets.py --asvs output, with the citation link the script printed. If the ASVS file is not installed, stays at
-  section level (V3.3) and offers the download instead of quoting requirement numbers from memory.
+  section level (V3.3), labels any requirement ID as unverified, and offers the download instead of quoting requirement
+  text from memory. Note: `claude plugin eval` runs in an isolated home, so it exercises the not-installed path.
