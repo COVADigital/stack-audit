@@ -11,7 +11,7 @@ import unittest
 
 from helpers import PLUGIN_ROOT
 
-RID = r"(?:git|ren|perf|state|net|cache|arch|sec|a11y|img|run|cnet|csec|host|sup|ops|cool)\.\d{2}"
+RID = r"(?:git|ren|perf|state|net|cache|arch|sec|a11y|img|run|cnet|csec|host|sup|ops|cool|dbs|dbm|dbo)\.\d{2}"
 
 # Labelled auto because another rule's check covers them; the report says which.
 CROSS_REF = {"net.14": "sec.04", "cache.05": "sec.07"}
@@ -25,18 +25,18 @@ def _read(paths) -> str:
 
 
 def reported_rules() -> set[str]:
-    """Rule IDs on a line that creates a finding: add(...), make(...) or `rule = ...`."""
+    """Rule IDs on a line that creates a finding: add(...), make(...), flag(...) or `rule = ...`."""
     code = _read(sorted(PLUGIN_ROOT.glob("skills/*/scripts/*.py")) + sorted((PLUGIN_ROOT / "lib" / "wclib").glob("*.py")))
     out = set()
     for line in code.splitlines():
-        if re.search(r"\b(add|make)\(|\brule\s*=", line):
+        if re.search(r"\b(add|make|flag)\(|\brule\s*=", line):
             out.update(re.findall(rf"[\"']({RID})[\"']", line))
     return out
 
 
 def labelled(*checks: str) -> set[str]:
     out = set()
-    for skill in ("web-standards", "container-standards"):
+    for skill in ("web-standards", "container-standards", "data-standards"):
         rules = json.loads((PLUGIN_ROOT / "skills" / skill / "rules.json").read_text(encoding="utf-8"))["rules"]
         out.update(f"{p}.{nn}" for p, rs in rules.items() for nn, e in rs.items() if e[0] in checks)
     return out

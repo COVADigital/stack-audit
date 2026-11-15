@@ -1,12 +1,12 @@
 {
   "name": "stack-audit",
-  "description": "Engineering standards and read-only audits for Next.js, Docker and OWASP security, as Claude Code skills.",
+  "description": "Engineering standards and read-only audits for Next.js, Postgres/Drizzle, Docker and OWASP security, as Claude Code skills.",
   "owner": { "name": "Joseph Bain" },
   "plugins": [
     {
       "name": "stack-audit",
       "source": "./",
-      "description": "Engineering standards and read-only audits for React/Next.js apps, Docker/Compose stacks, and OWASP-backed security and ASVS self-assessment."
+      "description": "Engineering standards and read-only audits for React/Next.js apps, Postgres/Drizzle databases, Docker/Compose stacks, and OWASP-backed security and ASVS self-assessment."
     }
   ]
 }

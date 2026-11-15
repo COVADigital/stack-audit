@@ -8,13 +8,14 @@
 
 # stack-audit
 
-A [Claude Code](https://claude.com/claude-code) plugin with engineering standards and **read-only** audits for React / Next.js apps, Docker / Compose stacks, and OWASP-backed security guidance.
+A [Claude Code](https://claude.com/claude-code) plugin with engineering standards and **read-only** audits for React / Next.js apps, Postgres / Drizzle databases, Docker / Compose stacks, and OWASP-backed security guidance.
 
-It gives Claude three skills, each with written standards, audit scripts that scan a project in seconds, and ready-to-use templates.
+It gives Claude four skills, each with written standards, audit scripts that scan a project in seconds, and ready-to-use templates.
 
 | Skill | Covers | Use it for |
 |---|---|---|
 | `web-standards` | React / Next.js: rendering, performance, state, networking, caching, architecture, security, accessibility and i18n, git hygiene. 179 rules, tuned for Next.js 16 and React 19. | Reviewing a file or PR, planning a page's rendering and caching, a pre-launch audit |
+| `data-standards` | Postgres with Drizzle: schema design, migration safety (Drizzle Kit, Prisma and plain SQL migrations), push vs migrate, connections, roles, SSL, seeds. 25 rules. | Reviewing a schema or a migration before it runs, a database check before release |
 | `container-standards` | Dockerfiles, Compose stacks, networks, published ports, secrets, volumes, Docker hosts, Coolify. 53 rules. | Reviewing a Dockerfile or Compose file, hardening a stack before deploy |
 | `owasp-security` | The OWASP Cheat Sheet Series, ASVS 5.0 and the OWASP Top 10, from a local copy. | "What does OWASP recommend for X", citations for a security doc, an ASVS self-assessment |
 
@@ -25,6 +26,7 @@ You don't need to name a skill. Ask normally and Claude loads the right one:
 ```text
 review src/app/checkout/page.tsx before I open a PR
 is compose.prod.yaml safe to deploy? read-only, don't change anything
+is drizzle/0007_add_billing.sql safe to run on production?
 what does OWASP recommend for password reset flows? I need the cheat sheet section
 how do we stand against ASVS level 2? give me the gaps
 audit this repo before launch: security, accessibility and the Docker setup
@@ -34,6 +36,7 @@ Or call a skill directly:
 
 ```text
 /stack-audit:web-standards
+/stack-audit:data-standards
 /stack-audit:container-standards
 /stack-audit:owasp-security
 ```
@@ -63,13 +66,14 @@ claude --plugin-dir path/to/stack-audit
 
 ### Permissions
 
-In Claude Code's default permission mode, loading a skill needs your approval, so the first time a skill applies Claude asks before using it. The audit scripts inside each skill are pre-approved and then run without further prompts. To approve the three skills up front, add this to `~/.claude/settings.json` (or a project's `.claude/settings.json`):
+In Claude Code's default permission mode, loading a skill needs your approval, so the first time a skill applies Claude asks before using it. The audit scripts inside each skill are pre-approved and then run without further prompts. To approve the four skills up front, add this to `~/.claude/settings.json` (or a project's `.claude/settings.json`):
 
 ```json
 {
   "permissions": {
     "allow": [
       "Skill(stack-audit:web-standards)",
+      "Skill(stack-audit:data-standards)",
       "Skill(stack-audit:container-standards)",
       "Skill(stack-audit:owasp-security)"
     ]
@@ -122,7 +126,7 @@ You can always update by hand with `git -C ~/.claude/data/owasp-cheatsheets pull
 ## How it works
 
 - **A start-up hook** tells Claude when to load each skill, so a question like "review this file" uses the standards instead of an answer from memory.
-- **An edit hook** checks each file Claude writes or edits (TypeScript/JavaScript, Dockerfiles, Compose files) for error-level security findings, such as XSS sinks, hard-coded secrets, raw SQL or a privileged container. It tells Claude straight away so the fix happens while the file is open. It runs offline in well under a second and says nothing when the file is clean. Turn it off with `STACK_AUDIT_ON_EDIT=0` or `{ "hooks": { "onEdit": false } }` in `stack-audit.config.json`.
+- **An edit hook** checks each file Claude writes or edits (TypeScript/JavaScript, Drizzle schemas, SQL migrations, Dockerfiles, Compose files) for error-level findings, such as XSS sinks, hard-coded secrets, raw SQL, a migration that would fail on a table with rows, or a privileged container. It tells Claude straight away so the fix happens while the file is open. It runs offline in well under a second and says nothing when the file is clean. Turn it off with `STACK_AUDIT_ON_EDIT=0` or `{ "hooks": { "onEdit": false } }` in `stack-audit.config.json`.
 - **Each skill is a `SKILL.md`** with reference files Claude reads only when it needs them. Findings cite rule IDs such as `sec.16`, which map to a section in the references.
 - **Audit scripts** do the mechanical scanning and report `file:line` findings with a severity, a fix hint and the rule ID.
 - **Missing scanners are offered, never installed silently.** Some checks use outside tools (hadolint, trivy, grype, gitleaks). If one isn't installed, Claude asks whether to run it once from its official container image, install it system-wide, or skip that check.
@@ -148,6 +152,9 @@ python scripts/stack_profile.py --root path/to/app
 # All static web checks, or selected domains
 python skills/web-standards/scripts/run_audit.py --root path/to/app --phase review
 python skills/web-standards/scripts/run_audit.py --root path/to/app --domain sec,a11y
+
+# Database: Drizzle schema, SQL migrations, push/migrate, connections (never connects to a database)
+python skills/data-standards/scripts/run_audit.py --root path/to/app
 
 # Dockerfiles and Compose files
 python skills/container-standards/scripts/run_audit.py --root path/to/repo --phase build

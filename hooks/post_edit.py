@@ -14,18 +14,28 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parent.parent
 WEB = PLUGIN / "skills" / "web-standards" / "scripts"
 CONTAINERS = PLUGIN / "skills" / "container-standards" / "scripts"
+DATA = PLUGIN / "skills" / "data-standards" / "scripts"
 TIMEOUT_S = 20
 MAX_FINDINGS = 8
 
 
-def script_for(name: str) -> Path | None:
+def scripts_for(file: Path) -> list[Path]:
+    name = file.name
     if re.search(r"\.(tsx?|jsx?|mjs|cjs)$", name) and not re.search(r"\.d\.ts$", name):
-        return WEB / "audit_security.py"
+        scripts = [WEB / "audit_security.py"]
+        try:  # Drizzle schema files also get the schema audit
+            if "drizzle-orm/pg-core" in file.read_text(encoding="utf-8", errors="replace"):
+                scripts.append(DATA / "audit_schema.py")
+        except OSError:
+            pass
+        return scripts
+    if name.endswith(".sql"):
+        return [DATA / "audit_migrations.py"]  # reports nothing unless the file is a migration
     if re.match(r"(Dockerfile|Containerfile)(\..+)?$|.+\.Dockerfile$", name):
-        return CONTAINERS / "audit_dockerfile.py"
+        return [CONTAINERS / "audit_dockerfile.py"]
     if re.match(r"(docker-)?compose([.-][\w.-]+)?\.ya?ml$", name):
-        return CONTAINERS / "audit_compose.py"
-    return None
+        return [CONTAINERS / "audit_compose.py"]
+    return []
 
 
 def project_root(file: Path, cwd: Path) -> Path:
@@ -53,21 +63,25 @@ def findings_for(payload: dict) -> tuple[str, list[dict]]:
     if not path:
         return "", []
     file = Path(path).resolve()
-    script = script_for(file.name)
-    if script is None or not file.is_file():
+    if not file.is_file():
+        return "", []
+    scripts = scripts_for(file)
+    if not scripts:
         return "", []
     cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
     root = project_root(file, cwd)
     if not enabled(root):
         return "", []
     rel = file.relative_to(root).as_posix()
-    res = subprocess.run([sys.executable, str(script), "--root", str(root), "--files", rel, "--format", "json"],
-                         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT_S)
-    if res.returncode not in (0, 1):
-        return rel, []
-    data = json.loads(res.stdout)
-    # Only this file's own error-level findings; project-wide ones (headers, lockfile) belong to a full audit.
-    found = [f for f in data.get("findings", []) if f.get("file") == rel and f.get("severity") == "error"]
+    found = []
+    for script in scripts:
+        res = subprocess.run([sys.executable, str(script), "--root", str(root), "--files", rel, "--format", "json"],
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT_S)
+        if res.returncode not in (0, 1):
+            continue
+        data = json.loads(res.stdout)
+        # Only this file's own error-level findings; project-wide ones (headers, lockfile) belong to a full audit.
+        found += [f for f in data.get("findings", []) if f.get("file") == rel and f.get("severity") == "error"]
     # Outside the session folder the root is the file's own folder, so rel is a bare name: show the full path.
     return (rel if root == cwd else str(file)), found
 

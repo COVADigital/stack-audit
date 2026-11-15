@@ -174,6 +174,15 @@ class PostEditHookTests(unittest.TestCase):
         self.assertEqual(self.run_hook("app/ok.tsx", "export const A = () => <p>hi</p>;\n", tool="Edit"), "")
         self.assertEqual(self.run_hook("README.md", "el.innerHTML = x; eval(y)\n"), "")
 
+    def test_drizzle_schema_and_migration(self):
+        ctx = self.run_hook("src/db/schema.ts", "import { pgTable, text } from 'drizzle-orm/pg-core';\n"
+                                                "export const log = pgTable('log', { msg: text('msg') });\n")
+        self.assertIn("dbs.01", ctx)
+        (self.dir / "drizzle.config.ts").write_text("export default { out: 'drizzle' };\n", encoding="utf-8")
+        ctx = self.run_hook("drizzle/0001_x.sql", 'ALTER TABLE "users" ADD COLUMN "email" text NOT NULL;\n')
+        self.assertIn("dbm.02", ctx)
+        self.assertEqual(self.run_hook("docs/notes.sql", 'ALTER TABLE "u" ADD COLUMN "e" text NOT NULL;\n'), "")
+
     def test_compose_secret(self):
         ctx = self.run_hook("compose.yaml", "services:\n  db:\n    image: postgres:17\n"
                                             "    environment: { POSTGRES_PASSWORD: hunter2 }\n")

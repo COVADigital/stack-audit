@@ -1,8 +1,8 @@
 {
   "name": "stack-audit",
   "displayName": "Stack Audit",
-  "version": "0.3.3",
-  "description": "Engineering standards and read-only audits for React/Next.js apps, Docker/Compose stacks, and OWASP-backed security and ASVS self-assessment.",
+  "version": "0.4.0",
+  "description": "Engineering standards and read-only audits for React/Next.js apps, Postgres/Drizzle databases, Docker/Compose stacks, and OWASP-backed security and ASVS self-assessment.",
   "author": { "name": "Joseph Bain" },
   "homepage": "https://github.com/COVADigital/stack-audit",
   "repository": "https://github.com/COVADigital/stack-audit",
