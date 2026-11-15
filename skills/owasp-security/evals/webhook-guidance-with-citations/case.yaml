@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: webhook-guidance-with-citations
+expected_outcome: |
+  Summarizes OWASP webhook guidance (signature verification over the raw body, timestamp / replay protection, secret handling)
+  with citations to the Webhook Security cheat sheet using URLs and anchors obtained from the skill's scripts.

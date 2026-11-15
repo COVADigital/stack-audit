@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: large-repo-audit
+expected_outcome: |
+  Lists every planted security and accessibility problem across ~60 files with its file path, without modifying files.
+context:
+  scaffold_script: place-files.sh

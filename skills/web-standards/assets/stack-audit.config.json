@@ -1,0 +1,16 @@
+{
+  "budgets": {
+    "initialJsGzipKb": 170,
+    "lcpMs": 2500,
+    "maxThirdPartyScripts": 3,
+    "dynamicImportKb": 30,
+    "virtualizeRows": 200,
+    "componentMaxLines": 150
+  },
+  "cors": { "allowedOrigins": ["https://example.com"] },
+  "features": { "root": "src/features", "publicApi": "index.ts" },
+  "i18n": { "sourceLocale": "en", "messagesDir": "messages" },
+  "asvs": { "level": null },
+  "ignorePaths": ["src/generated/**"],
+  "ignore": {}
+}

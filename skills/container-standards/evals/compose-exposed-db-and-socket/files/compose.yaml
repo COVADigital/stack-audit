@@ -1,0 +1,18 @@
+services:
+  app:
+    image: ghcr.io/acme/app:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DATABASE_URL: postgres://app:hunter2@db:5432/app
+  db:
+    image: postgres:17
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: hunter2
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data

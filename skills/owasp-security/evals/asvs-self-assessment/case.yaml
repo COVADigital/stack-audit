@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: asvs-self-assessment
+expected_outcome: |
+  Runs the self-assessment tooling, reports ASVS 5.0 section-level status with gaps first, labels the result a self-assessment
+  (not certification), and does not mark sections met without evidence.
+context:
+  scaffold_script: place-files.sh

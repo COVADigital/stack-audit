@@ -1,0 +1,27 @@
+# .github/workflows/container-scan.yml: lint Dockerfiles and scan the built image (sup.01, sup.02).
+# Pin every action to a full commit SHA (git.09) and keep the token read-only (git.08).
+name: container-scan
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<full-commit-sha> # vX.Y.Z
+      - name: Lint Dockerfile (hadolint)
+        uses: hadolint/hadolint-action@<full-commit-sha> # vX.Y.Z
+        with:
+          dockerfile: web/Dockerfile
+      - name: Build image
+        run: docker build -t app:${{ github.sha }} web
+      - name: Scan image (Trivy)
+        uses: aquasecurity/trivy-action@<full-commit-sha> # vX.Y.Z
+        with:
+          image-ref: app:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"

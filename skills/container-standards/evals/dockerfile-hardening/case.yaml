@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: dockerfile-hardening
+expected_outcome: |
+  Produces a multi-stage Dockerfile pinned to a specific Node version, running as a non-root user, using COPY instead of ADD,
+  no curl | sh, and Next.js standalone output; explains each change.
+context:
+  scaffold_script: place-files.sh

@@ -1,0 +1,5 @@
+{
+  "name": "worker-video",
+  "private": true,
+  "scripts": { "build": "tsc -p ." }
+}

@@ -1,0 +1,56 @@
+{
+  "_doc": "Rule metadata for container-standards. Key = domain prefix -> section number -> [check, default severity, optional OWASP sheets]. See web-standards/rules.json for the check vocabulary. Run scripts/build_rule_index.py after editing.",
+  "files": {
+    "img": "10-image-build.md",
+    "run": "11-runtime-hardening.md",
+    "cnet": "12-network-exposure.md",
+    "csec": "13-secrets.md",
+    "host": "14-host-daemon.md",
+    "sup": "15-supply-chain.md",
+    "ops": "16-data-ops.md",
+    "cool": "17-coolify.md"
+  },
+  "rules": {
+    "img": {
+      "01": ["auto", "warn", ["Docker_Security"]], "02": ["auto", "error", ["Docker_Security", "NodeJS_Docker"]],
+      "03": ["auto", "warn", ["Docker_Security"]], "04": ["auto", "error", ["Docker_Security"]],
+      "05": ["auto", "info", ["Docker_Security"]], "06": ["auto", "warn", ["NodeJS_Docker"]],
+      "07": ["auto", "info", ["Docker_Security"]], "08": ["auto", "warn", ["NodeJS_Docker"]],
+      "09": ["auto", "info", ["NodeJS_Docker"]], "10": ["auto", "warn"], "11": ["auto", "info", ["NodeJS_Docker", "Nextjs_Security"]]
+    },
+    "run": {
+      "01": ["auto", "error", ["Docker_Security"]], "02": ["auto", "info", ["Docker_Security"]],
+      "03": ["auto", "error", ["Docker_Security"]], "04": ["auto", "warn", ["Docker_Security"]],
+      "05": ["auto", "error", ["Docker_Security"]], "06": ["auto", "warn", ["Docker_Security"]],
+      "07": ["auto", "info", ["Docker_Security"]], "08": ["auto", "error", ["Docker_Security"]],
+      "09": ["auto", "warn", ["Docker_Security"]]
+    },
+    "cnet": {
+      "01": ["auto", "info", ["Docker_Security", "Network_Segmentation"]], "02": ["auto", "error", ["Docker_Security"]],
+      "03": ["auto", "warn", ["Docker_Security"]]
+    },
+    "csec": {
+      "01": ["auto", "error", ["Secrets_Management"]], "02": ["auto", "info", ["Docker_Security", "Secrets_Management"]],
+      "03": ["auto", "error", ["Docker_Security"]], "04": ["auto", "error", ["Docker_Security"]],
+      "05": ["auto", "error", ["Docker_Security"]], "06": ["auto", "warn", ["Docker_Security"]]
+    },
+    "host": {
+      "01": ["live", "info", ["Docker_Security"]], "02": ["live", "error", ["Docker_Security"]],
+      "03": ["live", "warn", ["Docker_Security"]], "04": ["live", "info", ["Docker_Security"]],
+      "05": ["live", "info", ["Docker_Security"]], "06": ["live", "warn", ["Docker_Security"]]
+    },
+    "sup": {
+      "01": ["tool", "warn", ["Docker_Security"]], "02": ["tool", "info", ["Docker_Security"]],
+      "03": ["manual", "info", ["Dependency_Graph_SBOM"]], "04": ["manual", "info", ["Software_Supply_Chain_Security"]],
+      "05": ["auto", "info", ["Vulnerable_Dependency_Management"]]
+    },
+    "ops": {
+      "01": ["auto", "warn"], "02": ["manual", "warn"], "03": ["auto", "warn"], "04": ["auto", "info"],
+      "05": ["auto", "warn", ["Logging"]], "06": ["auto", "info"], "07": ["auto", "info"]
+    },
+    "cool": {
+      "01": ["auto", "warn", ["Docker_Security"]], "02": ["manual", "error"], "03": ["auto", "info", ["Docker_Security"]],
+      "04": ["manual", "info", ["Secrets_Management"]], "05": ["manual", "info"]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+# Generic Node.js service (API / worker). Pin NODE_IMAGE by digest for production.
+ARG NODE_IMAGE=node:24-alpine
+
+FROM ${NODE_IMAGE} AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+USER 1000:1000
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["node", "healthcheck.js"]
+CMD ["node", "index.js"]

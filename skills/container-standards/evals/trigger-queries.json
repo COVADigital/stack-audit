@@ -1,0 +1,82 @@
+[
+  {
+    "query": "is it safe to mount /var/run/docker.sock into our watchtower container? coolify already has one",
+    "should_trigger": true
+  },
+  {
+    "query": "review the Dockerfile in ./web before we push it to ghcr, it's node 22 + next standalone and i think we run as root",
+    "should_trigger": true
+  },
+  {
+    "query": "we have postgres in docker compose on a hetzner box with ufw. a scanner says 5432 is open even though ufw denies it?? how",
+    "should_trigger": true
+  },
+  {
+    "query": "Going live on Coolify next week. Can you check our compose.prod.yaml for anything risky: networks, secrets, healthchecks, restart policies?",
+    "should_trigger": true
+  },
+  {
+    "query": "our docker host disk filled up from container logs. what should /etc/docker/daemon.json look like",
+    "should_trigger": true
+  },
+  {
+    "query": "set up trivy + hadolint scanning for our container image in github actions",
+    "should_trigger": true
+  },
+  {
+    "query": "how should I pass DATABASE_URL and the auth secret into the container without baking them into the image",
+    "should_trigger": true
+  },
+  {
+    "query": "which docker containers on my server are running privileged or with extra capabilities? I can paste docker inspect output",
+    "should_trigger": true
+  },
+  {
+    "query": "audit the docker setup in ~/projects/acme (Dockerfile, compose.dev.yaml, compose.prod.yaml) and give me the fix list",
+    "should_trigger": true
+  },
+  {
+    "query": "our nextjs container takes 1.4GB, how do we slim the image down",
+    "should_trigger": true
+  },
+  {
+    "query": "write a kubernetes helm chart for our api with HPA and an ingress",
+    "should_trigger": false
+  },
+  {
+    "query": "what does OWASP say about storing secrets, give me the cheat sheet citations for our security doc",
+    "should_trigger": false
+  },
+  {
+    "query": "our next.js app has a CSP violation for inline scripts after adding google analytics",
+    "should_trigger": false
+  },
+  {
+    "query": "set up a github actions workflow that runs eslint and vitest on PRs",
+    "should_trigger": false
+  },
+  {
+    "query": "postgres query is slow on the orders table, explain analyze shows seq scan",
+    "should_trigger": false
+  },
+  {
+    "query": "install docker desktop on windows 11 with wsl2, getting a virtualization error",
+    "should_trigger": false
+  },
+  {
+    "query": "write a bash script that backs up my home directory to an external drive every night",
+    "should_trigger": false
+  },
+  {
+    "query": "review my react component for accessibility, the modal doesn't trap focus",
+    "should_trigger": false
+  },
+  {
+    "query": "terraform module for an AWS ECS fargate service with an ALB",
+    "should_trigger": false
+  },
+  {
+    "query": "compare drizzle and prisma for a new next.js project",
+    "should_trigger": false
+  }
+]

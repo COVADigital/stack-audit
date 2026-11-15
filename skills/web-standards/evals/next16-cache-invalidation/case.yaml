@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: next16-cache-invalidation
+expected_outcome: |
+  Uses the Next 16 cache model: cacheTag inside the 'use cache' function, and updateTag (read-your-writes in a Server Action)
+  or revalidateTag(tag, 'max'); never the deprecated one-argument revalidateTag or segment config like `export const revalidate`.

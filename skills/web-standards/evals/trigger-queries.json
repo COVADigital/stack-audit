@@ -1,0 +1,82 @@
+[
+  {
+    "query": "can you review src/app/(shop)/checkout/page.tsx before i open the PR? worried the client component is pulling the whole cart lib into the bundle and the page feels slow on mobile",
+    "should_trigger": true
+  },
+  {
+    "query": "our nextjs 16 app keeps showing stale data after a server action updates the db. we use 'use cache' + cacheTag. whats the right invalidation call now, revalidateTag changed right?",
+    "should_trigger": true
+  },
+  {
+    "query": "run a full audit of ~/projects/acme/web for accessibility and i18n issues, we need WCAG 2.2 AA before the launch on the 20th",
+    "should_trigger": true
+  },
+  {
+    "query": "Is it ok to keep the JWT from our login endpoint in localStorage in my React app? Teammate says it's fine since we have CSP.",
+    "should_trigger": true
+  },
+  {
+    "query": "set up security headers (CSP with nonces, HSTS, permissions policy) for our Next.js App Router project, we deploy behind Coolify",
+    "should_trigger": true
+  },
+  {
+    "query": "hydration mismatch errors everywhere after upgrading to react 19 + next 16, mostly from Date.now() in a component. how should this be structured",
+    "should_trigger": true
+  },
+  {
+    "query": "check whether our repo has the basics: gitignore for .env, dependabot, codeowners, pre-commit secret scanning. it's a next app on github",
+    "should_trigger": true
+  },
+  {
+    "query": "the products grid re-renders 400 rows on every keystroke in the search box. tanstack query + zustand. what's the fix pattern",
+    "should_trigger": true
+  },
+  {
+    "query": "our muted text color in globals.css (oklch tokens, shadcn) might fail contrast in dark mode, can you check the pairs",
+    "should_trigger": true
+  },
+  {
+    "query": "Please do a pre-publish review of the marketing site in ./apps/web: bundle sizes, LCP image, fonts, metadata, the works",
+    "should_trigger": true
+  },
+  {
+    "query": "harden our docker-compose.prod.yml: postgres is published on 5432 and the app runs as root",
+    "should_trigger": false
+  },
+  {
+    "query": "what does the OWASP ASVS 5.0 say about session timeouts, and give me the exact cheat sheet sections",
+    "should_trigger": false
+  },
+  {
+    "query": "write a python fastapi endpoint that paginates orders from postgres with sqlalchemy",
+    "should_trigger": false
+  },
+  {
+    "query": "redesign our landing page hero so it feels less generic, its a next.js + tailwind site",
+    "should_trigger": false
+  },
+  {
+    "query": "review this git diff for security vulnerabilities before I merge: <diff of an express middleware>",
+    "should_trigger": false
+  },
+  {
+    "query": "set up vitest and react testing library in our vite react app, we have zero tests",
+    "should_trigger": false
+  },
+  {
+    "query": "explain the difference between useMemo and useCallback with a simple example for a junior dev",
+    "should_trigger": false
+  },
+  {
+    "query": "my Coolify server ran out of disk, docker logs are huge, how do I rotate container logs",
+    "should_trigger": false
+  },
+  {
+    "query": "convert this figma frame screenshot into a react component with tailwind",
+    "should_trigger": false
+  },
+  {
+    "query": "migrate our sanity schema from v2 to v3 and update the groq queries",
+    "should_trigger": false
+  }
+]

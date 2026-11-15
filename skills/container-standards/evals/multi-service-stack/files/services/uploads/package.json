@@ -1,0 +1,5 @@
+{
+  "name": "uploads",
+  "private": true,
+  "scripts": { "build": "tsc -p ." }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "stack-audit",
+  "displayName": "Stack Audit",
+  "version": "0.1.0",
+  "description": "Engineering standards and read-only audits for React/Next.js apps, Docker/Compose stacks, and OWASP-backed security and ASVS self-assessment.",
+  "author": { "name": "Joseph Bain" },
+  "homepage": "https://github.com/COVADigital/stack-audit",
+  "repository": "https://github.com/COVADigital/stack-audit",
+  "license": "MIT",
+  "icon": "assets/stack-audit-plugin-icon.png",
+  "keywords": ["nextjs", "react", "docker", "owasp", "asvs", "security", "accessibility", "performance", "audit"]
+}

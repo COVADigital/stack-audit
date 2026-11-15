@@ -1,0 +1,8 @@
+/**
+ * Rendering: <SSG | ISR/cached | dynamic | static shell + dynamic holes | CSR inside RSC shell>
+ * Cache:     <function> → 'use cache', cacheLife('<profile>'), tag <tag>; invalidated by <updateTag | revalidateTag(tag,'max')> in <file>
+ * Personal:  <what is per-user, and how it stays out of shared caches ('use cache: private' / request-time inside <Suspense>)>
+ * State:     <URL params | server (RSC/TanStack) | local | store> for <what>
+ * Why:       <audience, SEO needs, change frequency>
+ * Rules:     ren.20, cache.15 (and any deliberate deviations)
+ */

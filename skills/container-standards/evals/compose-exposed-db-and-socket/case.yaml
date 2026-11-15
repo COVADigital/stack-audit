@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: compose-exposed-db-and-socket
+expected_outcome: |
+  Flags postgres published on all interfaces (Docker bypasses UFW), the Docker socket mount, and the literal password,
+  with concrete fixes, and does not run docker or `docker compose config`.
+context:
+  scaffold_script: place-files.sh

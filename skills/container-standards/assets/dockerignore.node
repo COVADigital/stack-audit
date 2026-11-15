@@ -1,0 +1,27 @@
+# .dockerignore for Node / Next.js build contexts (csec.06)
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.npmrc
+# VCS / tooling
+.git
+.github
+.vscode
+.idea
+# Dependencies and build output (installed/built inside the image)
+node_modules
+.next
+out
+dist
+coverage
+.turbo
+# Tests and local data
+playwright-report
+test-results
+*.log
+Dockerfile*
+compose*.yaml
+docker-compose*.yml

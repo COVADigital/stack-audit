@@ -1,0 +1,71 @@
+# Hardened Compose template: app + PostgreSQL (container-standards references 11-16).
+# Secrets come from the environment (untracked env file or the platform's secret store).
+# Test hardening changes in a non-production stack first.
+
+x-hardening: &hardening
+  read_only: true                              # run.07
+  cap_drop: [ALL]                              # run.02
+  security_opt: ["no-new-privileges:true"]     # run.04
+  init: true                                   # img.06 / ops.07
+  logging:                                     # ops.05
+    driver: local
+
+services:
+  db:
+    image: postgres:17-alpine                  # pin a digest for production (img.01)
+    restart: unless-stopped                    # ops.04
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password   # csec.02
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    secrets: [db_password]
+    volumes:
+      - pgdata:/var/lib/postgresql/data        # ops.01
+    networks: [backend]                        # cnet.01 (internal, no published port)
+    healthcheck:                               # ops.03
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 60s                     # ops.07
+    mem_limit: 512m                            # run.06
+    pids_limit: 256
+    logging:
+      driver: local
+
+  app:
+    build: { context: ./web }
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }       # ops.03
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?}          # csec.01: interpolated, never literal
+    expose: ["3000"]                           # cnet.03: the reverse proxy routes here; no ports:
+    networks: [backend, edge]
+    <<: *hardening
+    tmpfs:
+      - /tmp:size=64m,mode=0700
+      - /app/.next/cache:size=64m,uid=1000,gid=1000   # Next.js standalone writes here
+    mem_limit: 1g
+    memswap_limit: 1g
+    pids_limit: 256
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+secrets:
+  db_password:
+    environment: DB_PASSWORD                   # value from the environment, not a tracked file
+
+networks:
+  backend:
+    internal: true                             # no route out for the database
+  edge: {}
+
+volumes:
+  pgdata:

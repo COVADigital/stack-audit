@@ -1,0 +1,322 @@
+services:
+  web:
+    build: ./services/web
+    image: ghcr.io/acme/web:1.8.3
+    ports:
+      - "127.0.0.1:8100:8080"
+    env_file:
+      - ./env/web.env
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  api:
+    build: ./services/api
+    image: ghcr.io/acme/api:1.8.3
+    ports:
+      - "127.0.0.1:8101:8080"
+    env_file:
+      - ./env/api.env
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  auth:
+    build: ./services/auth
+    image: ghcr.io/acme/auth:1.8.3
+    ports:
+      - "127.0.0.1:8102:8080"
+    env_file:
+      - ./env/auth.env
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  search:
+    build: ./services/search
+    image: ghcr.io/acme/search:1.8.3
+    ports:
+      - "127.0.0.1:8103:8080"
+    env_file:
+      - ./env/search.env
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  billing:
+    build: ./services/billing
+    image: ghcr.io/acme/billing:1.8.3
+    ports:
+      - "127.0.0.1:8104:8080"
+    env_file:
+      - ./env/billing.env
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  uploads:
+    build: ./services/uploads
+    image: ghcr.io/acme/uploads:1.8.3
+    ports:
+      - "127.0.0.1:8105:8080"
+    env_file:
+      - ./env/uploads.env
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  notify:
+    build: ./services/notify
+    image: ghcr.io/acme/notify:1.8.3
+    ports:
+      - "127.0.0.1:8106:8080"
+    env_file:
+      - ./env/notify.env
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  mailer:
+    build: ./services/mailer
+    image: ghcr.io/acme/mailer:1.8.3
+    ports:
+      - "127.0.0.1:8107:8080"
+    environment:
+      SMTP_HOST: smtp.example.com
+      SMTP_PASSWORD: Wint3rMail!2026
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  reports:
+    build: ./services/reports
+    image: ghcr.io/acme/reports:1.8.3
+    ports:
+      - "127.0.0.1:8108:8080"
+    env_file:
+      - ./env/reports.env
+    user: "0:0"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  worker-video:
+    build: ./services/worker-video
+    image: ghcr.io/acme/worker-video:1.8.3
+    ports:
+      - "127.0.0.1:8109:8080"
+    env_file:
+      - ./env/worker-video.env
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  metrics:
+    build: ./services/metrics
+    image: ghcr.io/acme/metrics:1.8.3
+    ports:
+      - "127.0.0.1:8110:8080"
+    env_file:
+      - ./env/metrics.env
+    pid: host
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.js"]
+      interval: 30s
+      retries: 3
+
+  cache:
+    image: redis:8.2.1-alpine
+    ports:
+      - "6379:6379"
+    env_file:
+      - ./env/cache.env
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    networks:
+      - backend
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      retries: 3
+
+networks:
+  backend:
+    internal: true

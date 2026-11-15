@@ -1,0 +1,106 @@
+{
+  "_doc": "Rule metadata for web-standards. Key = domain prefix -> section number -> [check, default severity, optional OWASP sheets]. check: auto (deterministic static check), heuristic (static, may false-positive: verify), build (needs .next build output), live (needs --url / --remote), tool (delegated, e.g. playwright-cli + axe), manual (judgment; listed under 'not checked'). Titles come from the reference headings. Run scripts/build_rule_index.py after editing.",
+  "files": {
+    "git": "01-git-security.md",
+    "ren": "02-rendering.md",
+    "perf": "03-performance.md",
+    "state": "04-state-management.md",
+    "net": "05-networking.md",
+    "cache": "06-caching.md",
+    "arch": "07-architecture.md",
+    "sec": "08-security.md",
+    "a11y": "09-accessibility-i18n.md"
+  },
+  "rules": {
+    "git": {
+      "01": ["auto", "warn", ["Software_Supply_Chain_Security"]],
+      "02": ["live", "error", ["Software_Supply_Chain_Security"]],
+      "03": ["auto", "warn", ["Software_Supply_Chain_Security"]],
+      "04": ["auto", "error", ["Secrets_Management"]],
+      "05": ["auto", "error", ["Secrets_Management"]],
+      "06": ["manual", "info"],
+      "07": ["manual", "info"],
+      "08": ["auto", "warn", ["GitHub_Actions_Security", "CI_CD_Security"]],
+      "09": ["auto", "warn", ["Vulnerable_Dependency_Management", "GitHub_Actions_Security"]],
+      "10": ["auto", "info"],
+      "11": ["auto", "error", ["Secrets_Management", "GitHub_Actions_Security"]],
+      "12": ["manual", "info"]
+    },
+    "ren": {
+      "01": ["auto", "warn"], "02": ["manual", "info"], "03": ["auto", "warn"], "04": ["heuristic", "warn"],
+      "05": ["heuristic", "warn"], "06": ["auto", "warn"], "07": ["manual", "info"], "08": ["heuristic", "info"],
+      "09": ["auto", "info"], "10": ["manual", "info"], "11": ["heuristic", "info"], "12": ["manual", "info"],
+      "13": ["auto", "warn"], "14": ["heuristic", "info"], "15": ["manual", "info"], "16": ["auto", "error"],
+      "17": ["manual", "info"], "18": ["auto", "warn"], "19": ["auto", "warn"], "20": ["manual", "info"]
+    },
+    "perf": {
+      "01": ["live", "warn"], "02": ["auto", "warn"], "03": ["live", "warn"], "04": ["auto", "warn"],
+      "05": ["live", "warn"], "06": ["auto", "warn"], "07": ["auto", "warn"], "08": ["auto", "info"],
+      "09": ["auto", "info"], "10": ["auto", "warn"], "11": ["build", "warn"], "12": ["manual", "info"],
+      "13": ["live", "warn"], "14": ["heuristic", "info"], "15": ["heuristic", "info"], "16": ["heuristic", "info"],
+      "17": ["manual", "info"], "18": ["build", "error"], "19": ["auto", "warn"], "20": ["auto", "warn"]
+    },
+    "state": {
+      "01": ["manual", "info"], "02": ["manual", "info"], "03": ["manual", "info"], "04": ["manual", "info"],
+      "05": ["heuristic", "warn"], "06": ["heuristic", "info"], "07": ["manual", "info"], "08": ["heuristic", "info"],
+      "09": ["heuristic", "warn"], "10": ["manual", "info"], "11": ["heuristic", "warn"], "12": ["heuristic", "warn", ["Input_Validation"]],
+      "13": ["heuristic", "info"], "14": ["heuristic", "info"], "15": ["manual", "info"], "16": ["manual", "info"],
+      "17": ["auto", "warn"], "18": ["auto", "error", ["Session_Management"]], "19": ["heuristic", "info"], "20": ["manual", "info"]
+    },
+    "net": {
+      "01": ["manual", "info"], "02": ["auto", "info", ["Web_Cache_Security"]], "03": ["auto", "info"], "04": ["manual", "info"],
+      "05": ["manual", "info"], "06": ["manual", "info"], "07": ["manual", "info", ["WebSocket_Security"]], "08": ["auto", "warn"],
+      "09": ["heuristic", "warn"], "10": ["manual", "info"], "11": ["auto", "warn"], "12": ["heuristic", "warn"],
+      "13": ["manual", "info"], "14": ["auto", "error", ["HTTP_Headers"]], "15": ["heuristic", "warn", ["Denial_of_Service", "Bot_Management_and_Anti-Automation"]], "16": ["manual", "info"],
+      "17": ["heuristic", "warn", ["Error_Handling"]], "18": ["auto", "warn"], "19": ["heuristic", "warn", ["REST_Security", "Input_Validation"]], "20": ["live", "info"],
+      "21": ["heuristic", "warn", ["Nextjs_Security", "Authorization"]]
+    },
+    "cache": {
+      "01": ["live", "warn"], "02": ["auto", "info"], "03": ["auto", "info"], "04": ["manual", "info"],
+      "05": ["auto", "error", ["HTML5_Security"]], "06": ["manual", "info"], "07": ["live", "info"], "08": ["live", "warn", ["Web_Cache_Security"]],
+      "09": ["live", "warn"], "10": ["auto", "info"], "11": ["manual", "info"], "12": ["manual", "info"],
+      "13": ["auto", "info"], "14": ["manual", "info"], "15": ["heuristic", "error", ["Web_Cache_Security", "Nextjs_Security"]], "16": ["auto", "info"],
+      "17": ["heuristic", "info"], "18": ["manual", "info"], "19": ["manual", "info"], "20": ["manual", "info"],
+      "21": ["manual", "info"]
+    },
+    "arch": {
+      "01": ["auto", "info"], "02": ["auto", "warn"], "03": ["auto", "warn"], "04": ["manual", "info"],
+      "05": ["manual", "info"], "06": ["manual", "info"], "07": ["auto", "info"], "08": ["auto", "warn"],
+      "09": ["heuristic", "info"], "10": ["manual", "info"], "11": ["manual", "info"], "12": ["manual", "info"],
+      "13": ["heuristic", "info"], "14": ["heuristic", "info"], "15": ["heuristic", "warn"], "16": ["heuristic", "warn"],
+      "17": ["auto", "info"], "18": ["auto", "error"], "19": ["manual", "info"], "20": ["auto", "warn"],
+      "21": ["heuristic", "warn", ["Nextjs_Security"]]
+    },
+    "sec": {
+      "01": ["auto", "error", ["Cross_Site_Scripting_Prevention", "DOM_based_XSS_Prevention"]],
+      "02": ["heuristic", "warn", ["Cross-Site_Request_Forgery_Prevention"]],
+      "03": ["auto", "warn", ["Content_Security_Policy"]],
+      "04": ["auto", "error", ["HTTP_Headers"]],
+      "05": ["auto", "warn", ["Clickjacking_Defense"]],
+      "06": ["auto", "error", ["Session_Management", "Cookie_Theft_Mitigation"]],
+      "07": ["auto", "error", ["Session_Management", "JSON_Web_Token"]],
+      "08": ["heuristic", "warn", ["OAuth2"]],
+      "09": ["auto", "error", ["JSON_Web_Token"]],
+      "10": ["heuristic", "error", ["Input_Validation", "SQL_Injection_Prevention", "Query_Parameterization"]],
+      "11": ["auto", "error", ["Vulnerable_Dependency_Management", "NPM_Security"]],
+      "12": ["auto", "warn", ["Third_Party_Javascript_Management"]],
+      "13": ["live", "warn", ["HTTP_Strict_Transport_Security", "Transport_Layer_Security"]],
+      "14": ["auto", "warn", ["HTML5_Security"]],
+      "15": ["auto", "warn", ["HTTP_Headers"]],
+      "16": ["auto", "error", ["Secrets_Management", "Nextjs_Security"]],
+      "17": ["heuristic", "error", ["Authentication", "Authorization", "Insecure_Direct_Object_Reference_Prevention"]],
+      "18": ["heuristic", "warn", ["Session_Management"]],
+      "19": ["auto", "warn", ["HTTP_Headers"]],
+      "20": ["auto", "info", ["Third_Party_Javascript_Management"]],
+      "21": ["heuristic", "warn", ["Server_Side_Request_Forgery_Prevention"]]
+    },
+    "a11y": {
+      "01": ["auto", "error"], "02": ["manual", "info"], "03": ["auto", "error"], "04": ["manual", "info"],
+      "05": ["auto", "error"], "06": ["auto", "error"], "07": ["auto", "error"], "08": ["auto", "error"],
+      "09": ["auto", "warn"], "10": ["auto", "warn"], "11": ["heuristic", "warn"], "12": ["heuristic", "warn"],
+      "13": ["tool", "warn"], "14": ["manual", "info"], "15": ["heuristic", "warn"], "16": ["auto", "info"],
+      "17": ["heuristic", "warn"], "18": ["auto", "warn"], "19": ["heuristic", "info"], "20": ["auto", "error"],
+      "21": ["manual", "info"]
+    }
+  }
+}

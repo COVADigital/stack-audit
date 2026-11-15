@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1
+# Next.js (output: 'standalone') production image. Build context: the app directory.
+#   docker build -t app:<git-sha> --build-arg GIT_SHA=<git-sha> .
+# Requires next.config: output: 'standalone'. Pin NODE_IMAGE by digest (img.01) and let
+# Dependabot's docker ecosystem update it (sup.05).
+ARG NODE_IMAGE=node:24-alpine
+
+# ---- deps: install from the lockfile inside Linux (native binaries match the runtime)
+FROM ${NODE_IMAGE} AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+# Private registry token? Never ARG/ENV (csec.03/04):
+# RUN --mount=type=secret,id=npm_token,env=NPM_TOKEN npm ci
+
+# ---- build
+FROM deps AS build
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY . .
+# NEXT_PUBLIC_* values are baked in here (img.11): pass them deliberately, never secrets.
+RUN npm run build
+
+# ---- runtime: only the standalone output, non-root, read-only friendly
+FROM ${NODE_IMAGE} AS runtime
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+# Writable runtime path for the Next.js cache (mount a tmpfs here when read_only: true)
+RUN mkdir -p /app/.next/cache && chown 1000:1000 /app/.next/cache
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+USER 1000:1000
+EXPOSE 3000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+CMD ["node", "server.js"]

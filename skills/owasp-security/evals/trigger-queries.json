@@ -1,0 +1,82 @@
+[
+  {
+    "query": "what does owasp recommend for password reset flows? need the actual cheat sheet section for a design review",
+    "should_trigger": true
+  },
+  {
+    "query": "map our app to ASVS 5.0 and tell me which chapters apply: next.js, better-auth, drizzle, file uploads to s3",
+    "should_trigger": true
+  },
+  {
+    "query": "we're building an MCP server that exposes our internal tickets to claude. what are the OWASP-recommended controls",
+    "should_trigger": true
+  },
+  {
+    "query": "our client asked if we're 'OWASP Top 10 compliant'. how do I answer that honestly and what should we check",
+    "should_trigger": true
+  },
+  {
+    "query": "give me citations from the OWASP cheat sheets for using SameSite + CSRF tokens with server actions, for our ADR",
+    "should_trigger": true
+  },
+  {
+    "query": "how do we stand on ASVS L2 for the portal app? need a gap list for the security review next sprint",
+    "should_trigger": true
+  },
+  {
+    "query": "is our OWASP cheat sheet clone up to date? and which sheets cover prompt injection for our RAG chatbot",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm writing a security policy doc and want to make sure every OWASP link in it actually exists, can you verify them",
+    "should_trigger": true
+  },
+  {
+    "query": "which OWASP guidance applies to JWTs signed with HS256 shared between two services",
+    "should_trigger": true
+  },
+  {
+    "query": "threat model for an LLM agent that can send emails on the user's behalf, using OWASP guidance",
+    "should_trigger": true
+  },
+  {
+    "query": "scan ./web for XSS and missing security headers and give me file:line findings",
+    "should_trigger": false
+  },
+  {
+    "query": "harden our compose file, the db port is exposed",
+    "should_trigger": false
+  },
+  {
+    "query": "review the diff on this branch for security vulnerabilities",
+    "should_trigger": false
+  },
+  {
+    "query": "implement rate limiting on our next.js login route with upstash redis",
+    "should_trigger": false
+  },
+  {
+    "query": "what is the difference between authentication and authorization, explain like i'm 12",
+    "should_trigger": false
+  },
+  {
+    "query": "set up better-auth with google sign-in in our next 16 app",
+    "should_trigger": false
+  },
+  {
+    "query": "our pentest report says 'missing HSTS' - add it to next.config.ts",
+    "should_trigger": false
+  },
+  {
+    "query": "write unit tests for the password hashing util using vitest",
+    "should_trigger": false
+  },
+  {
+    "query": "compare auth0 vs clerk pricing for 10k MAU",
+    "should_trigger": false
+  },
+  {
+    "query": "generate an SBOM for our node project in cyclonedx format",
+    "should_trigger": false
+  }
+]

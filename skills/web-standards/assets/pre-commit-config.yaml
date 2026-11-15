@@ -1,0 +1,9 @@
+# .pre-commit-config.yaml (01-git-security §05)
+# Install: pip install pre-commit && pre-commit install
+# The gitleaks hook runs `gitleaks git --pre-commit --redact --staged`.
+# Pin `rev` to the latest release from https://github.com/gitleaks/gitleaks/releases
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: vX.Y.Z
+    hooks:
+      - id: gitleaks
