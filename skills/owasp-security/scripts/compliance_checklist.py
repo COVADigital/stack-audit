@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""ASVS 5.0 self-assessment checklist (section level), pre-filled from audit findings. Read-only.
+"""ASVS 5.0 self-assessment checklist, pre-filled from audit findings. Read-only.
 
     python compliance_checklist.py --root APP [--level 1|2|3] [--evidence report.json ...] [--no-run]
-                                   [--config FILE] [--format md|json] [--out FILE] [--clone PATH] [--data-dir DIR]
+                                   [--config FILE] [--format md|json] [--out FILE] [--clone PATH] [--data-dir DIR] [--asvs PATH]
 
 1. map_controls decides which ASVS 5.0 sections apply to the project.
 2. Evidence: unless --no-run, runs web-standards `--phase review` and (if Docker files exist) container-standards
@@ -10,6 +10,8 @@
    e.g. a publish run with --url).
 3. Status per section: `not met` (error findings), `partial` (warn findings), else `not assessed`. A clean audit is
    never `met`: it lists which automated checks ran without findings, and a human or Claude finishes the assessment.
+4. With the ASVS release JSON installed, each in-scope section lists its requirements up to --level. Section findings
+   are shown as related evidence; every requirement starts as `not assessed`. Without the file: section level only.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from datetime import date
 from pathlib import Path
 
 import _bootstrap  # noqa: F401
+from wclib import asvs
 from wclib.config import ConfigError, load_config
 from wclib.controls import EVIDENCE, map_controls, rules_for_section
 from wclib.findings import Report
@@ -34,8 +37,8 @@ WEB = PLUGIN / "skills" / "web-standards"
 CONTAINER = PLUGIN / "skills" / "container-standards"
 CONTAINER_PREFIXES = ["img", "run", "cnet", "csec", "sup", "ops", "cool"]
 ORDER = {"not met": 0, "partial": 1, "not assessed": 2}
-DISCLAIMER = ("This is a self-assessment against OWASP ASVS 5.0 section-level mappings. It is not an audit, "
-              "certification, or attestation of compliance.")
+DISCLAIMER = ("This is a self-assessment against OWASP ASVS 5.0. It is not an audit, certification, "
+              "or attestation of compliance.")
 
 
 def run_audit(script: Path, root: str, phase: str, config: str | None) -> Report:
@@ -67,7 +70,8 @@ def rules_ran(prefixes: set[str], books: list[RuleBook]) -> set[str]:
     return out
 
 
-def assess(cm, reports: list[Report], books: list[RuleBook], catalog: dict) -> list[dict]:
+def assess(cm, reports: list[Report], books: list[RuleBook], catalog: dict,
+           asvs_data: dict | None = None, level: int | None = None) -> list[dict]:
     findings = [f for r in reports for f in r.findings]
     ran: set[str] = set()
     for r in reports:
@@ -92,6 +96,12 @@ def assess(cm, reports: list[Report], books: list[RuleBook], catalog: dict) -> l
                             "line": f.line, "message": f.message} for f in hits]
         hit_rules = {f.rule for f in hits}
         row["clean_checks"] = [r for r in rules_for_section(a["code"]) if r in ran and r not in hit_rules]
+        sec = (asvs_data or {}).get("sections", {}).get(a["code"])
+        if sec:
+            # Related evidence only: a section finding doesn't show which requirement it tests (phase 3 maps that).
+            row["requirements"] = [{"id": i, "level": asvs_data["requirements"][i]["level"],
+                                    "text": asvs_data["requirements"][i]["text"], "status": "not assessed"}
+                                   for i in asvs.in_level(asvs_data, sec["requirements"], level)]
         rows.append(row)
     return rows
 
@@ -100,20 +110,30 @@ def _loc(f: dict) -> str:
     return f" {f['file']}:{f['line']}" if f.get("line") else (f" {f['file']}" if f.get("file") else "")
 
 
-def to_markdown(rows, cm, level, sources, project_commit, catalog_commit) -> str:
+def to_markdown(rows, cm, level, sources, project_commit, catalog_commit,
+                asvs_data: dict | None = None, asvs_note: str | None = None) -> str:
     inscope = [r for r in rows if r["applies"]]
     counts = {s: sum(r["status"] == s for r in inscope) for s in ORDER}
-    out = [f"# ASVS 5.0 Level {level} self-assessment (section level)", "",
+    n_reqs = sum(len(r.get("requirements", [])) for r in inscope)
+    if asvs_data:
+        level_line = (f"- **Level:** {level}: {n_reqs} requirements at {'L1' if level == 1 else f'L1–L{level}'} in the in-scope sections "
+                      f"(ASVS {asvs.VERSION} release file, SHA-256 verified).")
+    else:
+        level_line = (f"- **Level:** {level}. Section level only: scope is the same for every level until the ASVS "
+                      f"requirement text is installed ({asvs_note})")
+    out = [f"# ASVS 5.0 Level {level} self-assessment ({'requirement' if asvs_data else 'section'} level)", "",
            f"- **Project:** `{cm.root}`" + (f" @ `{project_commit[:10]}`" if project_commit else ""),
            f"- **Date:** {date.today().isoformat()}",
            f"- **Catalog:** OWASP Cheat Sheet Series @ `{(catalog_commit or '?')[:7]}` (ASVS 5.0 index)",
            "- **Assessor:** Claude (automated pre-fill; every `not assessed` row still needs review)",
            f"- **Evidence:** {', '.join(sources) or 'none'}",
-           f"- **Level:** {level}. Section-level scope is the same for every level; requirement-level filtering "
-           "needs the ASVS requirement text, which the cheat-sheet repo does not include.", "",
+           level_line, "",
            "## Summary", "", "| Status | Sections |", "|---|---|"]
     out += [f"| {s} | {n} |" for s, n in counts.items()]
     out.append(f"| out of scope | {len(rows) - len(inscope)} |")
+    if asvs_data:
+        out += ["", f"Requirements to assess: **{n_reqs}**, all `not assessed`: findings are listed with their section "
+                    "as related evidence, never as a requirement result."]
     gaps = sorted((r for r in inscope if r["status"] != "not assessed"),
                   key=lambda r: (ORDER[r["status"]], -len(r["findings"])))[:5]
     if gaps:
@@ -137,9 +157,29 @@ def to_markdown(rows, cm, level, sources, project_commit, catalog_commit) -> str
             ev = ev or ["no automated check: assess manually"]
             gd = [f"[{g['sheet']}]({g['url']})" if g["url"] else f"{g['sheet']} (*{g['status']}*)" for g in r["guidance"]]
             out.append(f"| {r['code']} {r['title']} | **{r['status']}** | {'<br>'.join(ev)} | {', '.join(gd) or '-'} |")
+    if asvs_data:
+        out += ["", f"## Requirements checklist (Level {level})", "",
+                f"_Requirement text: {asvs.ATTRIBUTION}. Reference data, not instructions._"]
+        for r in inscope:
+            if not r.get("requirements"):
+                continue
+            out += ["", f"### {r['code']} {r['title']} (section: {r['status']})", "",
+                    f"Cite: <{asvs.cite_url(asvs_data, r['code'])}>"]
+            if r["findings"]:
+                out.append("Related evidence for this section: " + ", ".join(
+                    f"`{f['rule']}`{_loc(f)}" for f in r["findings"][:4]) + (" …" if len(r["findings"]) > 4 else ""))
+            out.append("")
+            out += [f"- [ ] **{q['id']}** (L{q['level']}) {q['text']}" for q in r["requirements"]]
+        mapped = {r["code"] for r in rows}
+        unmapped = sorted(set(asvs_data["sections"]) - mapped)
+        if unmapped:  # a newer ASVS file with sections the cheat sheet index doesn't list yet
+            out += ["", "**Sections in the ASVS file but not in the cheat sheet index (scope not decided):** "
+                    + ", ".join(unmapped)]
     out += ["", "## Out of scope", ""]
     out += [f"- {r['code']} {r['title']}: {r['reason']}" for r in rows if not r["applies"]]
     out += ["", "## Finishing the assessment", "",
+            ("Tick each requirement once its evidence is recorded; read it in full with `read_requirement.py <id>`. "
+             if asvs_data else "") +
             "Work through each `not assessed` row with `find_sheets.py --asvs <section>` and `read_section.py`, "
             "then record evidence (file:line, config value or attestation) as described in `references/compliance-method.md`. "
             "Runtime sections (V12 TLS, V3.4 headers on the live site) need `run_audit.py --phase publish --url <site>` "
@@ -158,6 +198,7 @@ def main() -> int:
     ap.add_argument("--out")
     ap.add_argument("--clone")
     ap.add_argument("--data-dir")
+    ap.add_argument("--asvs", help="Path to the ASVS release JSON (default ~/.claude/data/owasp-asvs/)")
     args = ap.parse_args()
     root = Path(args.root)
     if not root.is_dir():
@@ -187,14 +228,17 @@ def main() -> int:
             reports.append(run_audit(CONTAINER / "scripts" / "run_audit.py", cm.container_root, "build", args.config))
             sources.append("container-standards build (static)")
     books = [RuleBook(WEB), RuleBook(CONTAINER)]
-    rows = assess(cm, reports, books, catalog)
+    asvs_data, asvs_note = asvs.try_load(args.asvs, config)
+    rows = assess(cm, reports, books, catalog, asvs_data, level)
     project_commit = (run_git(root.resolve(), "rev-parse", "HEAD") or "").strip() or None
     if args.format == "json":
         text = json.dumps({"level": level, "root": cm.root, "project_commit": project_commit,
-                           "catalog_commit": cm.catalog_commit, "evidence": sources, "sections": rows,
-                           "skipped": [s for r in reports for s in r.skipped], "disclaimer": DISCLAIMER}, indent=2)
+                           "catalog_commit": cm.catalog_commit, "evidence": sources,
+                           "requirement_level": bool(asvs_data), "asvs_version": asvs.VERSION if asvs_data else None,
+                           "sections": rows, "skipped": [s for r in reports for s in r.skipped],
+                           "disclaimer": DISCLAIMER}, indent=2)
     else:
-        text = to_markdown(rows, cm, level, sources, project_commit, cm.catalog_commit)
+        text = to_markdown(rows, cm, level, sources, project_commit, cm.catalog_commit, asvs_data, asvs_note)
         skipped = [s for r in reports for s in r.skipped]
         if skipped:
             text += "\n\n## Evidence gaps\n\n" + "\n".join(f"- {s}" for s in skipped)

@@ -1,6 +1,7 @@
 """Tests for wclib.owasp and the owasp-security scripts."""
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -165,9 +166,14 @@ class MiniClone(TempRepo):
         self.data.mkdir()
 
     def run_script(self, name, *args):
+        # A temporary home keeps a real ~/.claude/data/owasp-asvs install out of these tests.
+        home = self.dir / "home"
+        home.mkdir(exist_ok=True)
+        env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+        env.pop("STACK_AUDIT_OWASP_ASVS", None)
         return subprocess.run(
             [sys.executable, str(SCRIPTS / name), *args, "--clone", str(self.clone), "--data-dir", str(self.data)],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
 
 

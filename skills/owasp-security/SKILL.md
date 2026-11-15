@@ -64,6 +64,7 @@ python $S/compliance_checklist.py --root <app> --data-dir ${CLAUDE_PLUGIN_DATA} 
 
 - `map_controls.py` is the scoping step: which sheets apply and why (for example "dependency `better-auth`" or "`type="file"` in src/..."), which ASVS sections are in or out of scope, and the Top 10 categories covered.
 - `compliance_checklist.py` runs the **local static** audits of web-standards (`review`) and container-standards (`build`), maps their findings to ASVS sections, and pre-fills status: `not met` (error findings), `partial` (warnings), otherwise `not assessed`. It never marks a section `met`. Rows list which automated checks ran clean, but a human or you must finish each one.
+- With the ASVS release file installed, the report is **requirement level**: each in-scope section lists its requirements up to `--level` (L1 ⊂ L2 ⊂ L3), all `not assessed`, with the section's findings as related evidence. Never mark a requirement met or not met from a section finding alone.
 - Live evidence (headers, TLS) needs a publish run with `--url`, which contacts the site, so **ask first**. Then pass its JSON with `--evidence`. Use `--no-run` to rely only on `--evidence` files.
 - Then work through the `not assessed` rows with `find_sheets.py --asvs <section>` and `read_section.py`, following `references/compliance-method.md`. Results are always a **self-assessment**, never a claim of compliance or certification.
 

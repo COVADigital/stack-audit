@@ -157,6 +157,49 @@ class ScriptTests(AsvsCase):
         self.assertIn("section level", res.stdout)
 
 
+class ChecklistTests(AsvsCase):
+    def checklist(self, *args, installed=True):
+        self.write("app/package.json", json.dumps({"dependencies": {"next": "16.0.0"}}))
+        ev = self.write("evidence.json", json.dumps({
+            "tool": "web-standards review", "root": "app", "meta": {"domains": ["sec"]},
+            "findings": [{"rule": "sec.06", "severity": "error", "confidence": "high", "message": "cookie lacks Secure",
+                          "file": "src/lib/auth.ts", "line": 4}]}))
+        return self.run_script("compliance_checklist.py", "--root", str(self.dir / "app"), "--no-run",
+                               "--evidence", str(ev), *args, installed=installed)
+
+    def test_requirements_by_level_with_related_evidence(self):
+        def reqs(level):
+            res = self.checklist("--level", level, "--format", "json")
+            self.assertEqual(res.returncode, 0, res.stderr)
+            data = json.loads(res.stdout)
+            self.assertTrue(data["requirement_level"])
+            rows = {r["code"]: r for r in data["sections"] if r["applies"]}
+            return rows, [q for r in rows.values() for q in r.get("requirements", [])]
+        rows, l1 = reqs("1")
+        self.assertEqual(sorted(q["id"] for q in l1), ["V15.1.1", "V3.3.1"])
+        self.assertEqual(rows["V3.3"]["status"], "not met")  # section status still comes from the finding
+        _, l3 = reqs("3")
+        self.assertEqual(len(l3), 4)
+        self.assertEqual({q["status"] for q in l3}, {"not assessed"})  # never inferred from section findings
+        md = self.checklist("--level", "1").stdout
+        self.assertIn("# ASVS 5.0 Level 1 self-assessment (requirement level)", md)
+        self.assertIn("2 requirements at L1", md)
+        self.assertIn("- [ ] **V3.3.1** (L1) Synthetic test requirement V3.3.1.", md)
+        self.assertNotIn("V3.3.2", md)
+        self.assertIn("Related evidence for this section: `sec.06` src/lib/auth.ts:4", md)
+        self.assertIn("Cite: <" + asvs.SOURCE_BASE + "0x12-V3-Web-Frontend-Security.md#v33-cookie-setup>", md)
+        self.assertNotIn("| met |", md)
+
+    def test_section_level_without_data(self):
+        res = self.checklist("--format", "json", installed=False)
+        data = json.loads(res.stdout)
+        self.assertFalse(data["requirement_level"])
+        self.assertFalse(any("requirements" in r for r in data["sections"]))
+        md = self.checklist(installed=False).stdout
+        self.assertIn("self-assessment (section level)", md)
+        self.assertIn(asvs.DOWNLOAD_URL, md)
+
+
 class StartupNoteTests(AsvsCase):
     def note(self, installed):
         out = subprocess.run([sys.executable, str(PLUGIN_ROOT / "hooks" / "session_start.py")], capture_output=True,
