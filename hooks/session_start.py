@@ -13,7 +13,7 @@ MAX_AGE_DAYS = 30
 
 CONTEXT = """The stack-audit plugin is installed. Load the matching skill BEFORE reading files or answering, even for a single-file question you could answer from memory:
 - stack-audit:web-standards: reviewing, auditing, debugging or changing React / Next.js code (components, pages, data fetching, caching, Server Actions, auth, sessions, headers, accessibility).
-- stack-audit:container-standards: reviewing or changing a Dockerfile, a Compose file, a container image, published ports, container secrets or a Docker host.
+- stack-audit:container-standards: reviewing or changing a Dockerfile, a Compose file, a container image, published ports, container secrets, a Docker host or a Coolify server.
 - stack-audit:data-standards: writing or reviewing a Drizzle schema or a database migration (Drizzle Kit, Prisma, SQL), drizzle-kit push vs migrate, database connections, roles, SSL or seed scripts.
 - stack-audit:owasp-security: what OWASP, ASVS or the OWASP Top 10 says, or security advice that needs citations.
 Do not load them for unrelated work."""

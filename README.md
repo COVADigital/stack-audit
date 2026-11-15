@@ -16,7 +16,7 @@ It gives Claude four skills, each with written standards, audit scripts that sca
 |---|---|---|
 | `web-standards` | React / Next.js: rendering, performance, state, networking, caching, architecture, security, accessibility and i18n, git hygiene. 179 rules, tuned for Next.js 16 and React 19. | Reviewing a file or PR, planning a page's rendering and caching, a pre-launch audit |
 | `data-standards` | Postgres with Drizzle: schema design, migration safety (Drizzle Kit, Prisma and plain SQL migrations), push vs migrate, connections, roles, SSL, seeds. 25 rules. | Reviewing a schema or a migration before it runs, a database check before release |
-| `container-standards` | Dockerfiles, Compose stacks, networks, published ports, secrets, volumes, Docker hosts, Coolify. 53 rules. | Reviewing a Dockerfile or Compose file, hardening a stack before deploy |
+| `container-standards` | Dockerfiles, Compose stacks, networks, published ports, secrets, volumes, Docker hosts, Coolify (with optional live checks of a Coolify server). 59 rules. | Reviewing a Dockerfile or Compose file, hardening a stack before deploy |
 | `owasp-security` | The OWASP Cheat Sheet Series, ASVS 5.0 and the OWASP Top 10, from a local copy. | "What does OWASP recommend for X", citations for a security doc, an ASVS self-assessment |
 
 ## What you can ask
@@ -123,6 +123,19 @@ or add this to `stack-audit.config.json` in a project:
 
 You can always update by hand with `git -C ~/.claude/data/owasp-cheatsheets pull --ff-only`.
 
+### Optional: Coolify add-on
+
+If you deploy with [Coolify](https://coolify.io), the plugin can also check the live server: public databases, database backups, pending OS updates, image vulnerability scans, secrets passed to builds, and server access settings. Everyone else can ignore this; the Compose checks work without it.
+
+The first time Coolify comes up, Claude asks once whether you want the add-on and remembers the answer in `~/.claude/data/stack-audit/addons.json`. If you say yes:
+
+1. Claude checks whether Claude Code and Codex CLI already have a `coolify` MCP server. Where one is missing, it asks which clients to set up and for your Coolify URL, then adds the server (`coolify_addon.py install --url https://your-coolify-host --client claude|codex|both`). Both configs read the token from the `COOLIFY_TOKEN` environment variable (Claude Code: header `Bearer ${COOLIFY_TOKEN}`; Codex: `--bearer-token-env-var`), so the token is never written into either config.
+2. In Coolify, create an API token (**Keys & Tokens → API tokens**) with only the **read** permission. Add **read:sensitive** only if you want docker run options checked. Never give it write, deploy or root.
+3. Store the token with `python skills/container-standards/scripts/coolify_addon.py set-token`. Run it in your own terminal so the token goes into a hidden prompt and never into the chat (recommended), or paste it to Claude, which passes it on stdin. It is saved as a user environment variable (Windows: your user environment; macOS/Linux: `~/.config/stack-audit/coolify.env`, mode 0600, sourced from your shell profile), and the connection is checked.
+4. Restart Claude Code and Codex from a new terminal.
+
+The checks are strictly read-only. Claude asks which Coolify projects to audit, reads them with the connector's read tools only (never start, stop, deploy or change), reads environment variable names but never values, and saves the snapshot to a temporary folder outside your repository. To change your answer later, run `python skills/container-standards/scripts/coolify_addon.py set yes` (or `no`).
+
 ## How it works
 
 - **A start-up hook** tells Claude when to load each skill, so a question like "review this file" uses the standards instead of an answer from memory.
@@ -139,6 +152,7 @@ You can always update by hand with `git -C ~/.claude/data/owasp-cheatsheets pull
 - They make no network calls unless you pass an explicit flag: `--url` (probe a deployed site's headers), `--audit` (npm audit), `--remote` (GitHub settings) or `--image` (image vulnerability scan).
 - The start-up hook only reads local files, unless you have turned on automatic cheat sheet updates. The edit hook only reads the file that was edited and the project's config.
 - The Compose audit never reads env files or secret files, and never prints secret values.
+- The Coolify audit reads only a snapshot file, refuses one that contains secret-shaped fields, and never prints commands or docker run options.
 - Claude asks before running anything that contacts an external service.
 
 ## Use the audits without Claude

@@ -295,6 +295,9 @@ class ComposeAudit(Audit):
         for p in ("run", "cnet", "ops", "cool"):
             self.report.not_checked += self.rb.not_checked(p)
         self.report.not_checked.append("Effective config on the server (Coolify UI settings, extra networks): run audit_runtime.py there")
+        if self.report.meta.get("coolify_files"):
+            self.report.not_checked.append("Live Coolify settings (public databases, backups, updates, image scans): "
+                                           "optional Coolify add-on, see references/17-coolify.md \"Live checks\"")
 
 
 if __name__ == "__main__":

@@ -50,8 +50,11 @@
       "05": ["auto", "warn", ["Logging"]], "06": ["auto", "info"], "07": ["auto", "info"]
     },
     "cool": {
-      "01": ["auto", "warn", ["Docker_Security"]], "02": ["manual", "error"], "03": ["auto", "info", ["Docker_Security"]],
-      "04": ["manual", "info", ["Secrets_Management"]], "05": ["manual", "info"]
+      "01": ["auto", "warn", ["Docker_Security"]], "02": ["live", "error"], "03": ["auto", "info", ["Docker_Security"]],
+      "04": ["manual", "info", ["Secrets_Management"]], "05": ["manual", "info"],
+      "06": ["live", "warn", ["Secrets_Management", "Docker_Security"]], "07": ["live", "info", ["Docker_Security"]],
+      "08": ["live", "warn", ["Docker_Security"]], "09": ["live", "warn"], "10": ["live", "warn", ["Logging"]],
+      "11": ["live", "info"]
     }
   }
 }

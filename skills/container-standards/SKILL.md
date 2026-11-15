@@ -6,7 +6,7 @@ allowed-tools: Bash(python ${CLAUDE_PLUGIN_ROOT}/skills/container-standards/scri
 
 # Container Standards
 
-Every **Rule** in `references/` is a requirement. Findings cite rule IDs such as `cnet.02` (section 02 of `12-network-exposure.md`). `references/rule-index.md` lists all 53 rules and how each one is checked.
+Every **Rule** in `references/` is a requirement. Findings cite rule IDs such as `cnet.02` (section 02 of `12-network-exposure.md`). `references/rule-index.md` lists all 59 rules and how each one is checked.
 
 | Prefix | Reference | Covers |
 |---|---|---|
@@ -17,7 +17,7 @@ Every **Rule** in `references/` is a requirement. Findings cite rule IDs such as
 | `host` | 14-host-daemon.md | engine/kernel updates, TCP socket, log rotation, daemon defaults, rootless, firewall |
 | `sup` | 15-supply-chain.md | scanning, hadolint, SBOM/provenance, signing, base-image updates |
 | `ops` | 16-data-ops.md | volumes, backups, healthchecks, restart, log rotation, `version:`, graceful shutdown |
-| `cool` | 17-coolify.md | proxy routing, public databases, platform socket allow-list, env store, extra networks |
+| `cool` | 17-coolify.md | proxy routing, public databases, platform socket allow-list, env store, extra networks, build-time secrets, server updates and access, volume cleanup, log redaction, plus **live checks** (optional add-on) |
 
 ## 1. Audits (all read-only)
 
@@ -30,6 +30,7 @@ python ${CLAUDE_PLUGIN_ROOT}/skills/container-standards/scripts/audit_dockerfile
 python ${CLAUDE_PLUGIN_ROOT}/skills/container-standards/scripts/audit_compose.py    --root <repo> [--daemon-rotation]      # run.*, cnet.*, csec.01–03, csec.07, ops.*, cool.*
 python ${CLAUDE_PLUGIN_ROOT}/skills/container-standards/scripts/audit_runtime.py    [--all]                                # the same rules on real containers
 python ${CLAUDE_PLUGIN_ROOT}/skills/container-standards/scripts/scan_image.py --dockerfile <path> | --image <name:tag>     # hadolint / trivy / grype if installed
+python ${CLAUDE_PLUGIN_ROOT}/skills/container-standards/scripts/audit_coolify.py --snapshot <file> [--project NAME]       # Coolify live checks from a snapshot (§4)
 python3 audit_host.py                                                # ON THE LINUX SERVER, run by the user
 ```
 
@@ -52,7 +53,15 @@ python3 audit_host.py                                                # ON THE LI
 - Live scripts use only `docker ps`, `docker inspect`, `docker info` and `docker version`.
 - For OWASP depth, use **owasp-security** (`Docker_Security`, `NodeJS_Docker`, `Secrets_Management`). Each reference ends with an OWASP mapping table.
 
-## 4. Checks worth keeping
+## 4. Coolify add-on (optional)
+
+Not everyone runs Coolify, so live Coolify checks are opt-in. When Coolify comes up, run `python ${CLAUDE_PLUGIN_ROOT}/skills/container-standards/scripts/coolify_addon.py status`. If `choice` is `null`, ask the user Yes/No with AskUserQuestion whether they want the add-on, and save the answer with `coolify_addon.py set yes|no`. Never ask again after "no". On "yes", follow `17-coolify.md` "Live checks" exactly: check whether Claude Code and Codex CLI already have the `coolify` MCP server, install it where missing (`coolify_addon.py install --url <coolify-url> --client claude|codex|both`), store the token (`coolify_addon.py set-token`), verify, and collect snapshots.
+
+- **Strictly read-only.** Use only the read tools in the recipe. Never call `control`, `deploy`, `rollback_application`, `create_*`, `manage_*`, `docker_cleanup`, `get_env_values` or `get_logs` for an audit.
+- **Token handling.** Recommend the hidden `set-token` prompt in the user's own terminal. If they choose to paste the token in the chat, warn that it enters the transcript, pass it to `set-token` on stdin only, and never repeat or store it elsewhere. Client configs hold only the `COOLIFY_TOKEN` variable name.
+- **Ask which projects to audit** (multi-select) before reading any resource, and keep the snapshot in the session scratchpad, never in a repository.
+
+## 5. Checks worth keeping
 
 When you run a check of your own that isn't one of this plugin's rules and is likely to be needed again (a search for a project-specific mistake, a regression you just fixed), ask the user what to do with it before you finish:
 
