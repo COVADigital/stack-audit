@@ -68,13 +68,14 @@ class DbOpsAudit(Audit):
                 self.add("dbo.01", f"package.json script `{name}` runs drizzle-kit push", file="package.json",
                          fix_hint="drizzle-kit generate in development, drizzle-kit migrate when deploying")
         workflows = [b / ".github" / "workflows" for b in repo_paths(self.root)]
-        ci_text = []
+        ci_text, ci_files = [], []
         for wf_dir in workflows:
             if not wf_dir.is_dir():
                 continue
             for wf in sorted(wf_dir.glob("*.y*ml")):
                 text = wf.read_text(encoding="utf-8", errors="replace")
                 ci_text.append(text)
+                ci_files.append(f".github/workflows/{wf.name}")
                 if m := uses_push.search(text):
                     self.add("dbo.01", "CI workflow runs drizzle-kit push", file=f".github/workflows/{wf.name}",
                              line=text.count("\n", 0, m.start()) + 1, fix_hint="Apply migrations with drizzle-kit migrate")
@@ -87,7 +88,7 @@ class DbOpsAudit(Audit):
         if self.uses_drizzle and ci_text:
             joined = "\n".join(ci_text)
             if "drizzle-kit check" not in joined and not any(re.search(rf"\brun\s+{re.escape(n)}\b", joined) for n in check_scripts):
-                self.add("dbo.02", "CI doesn't run drizzle-kit check on migration history", file=".github/workflows",
+                self.add("dbo.02", "CI doesn't run drizzle-kit check on migration history", file=ci_files[0],
                          fix_hint="Add a step: npx drizzle-kit check")
 
     # ------------------------------------------------------------- dbo.03 / dbo.04

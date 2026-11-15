@@ -192,7 +192,7 @@ Per path, in `stack-audit.config.json` at the project root:
 
 Each skill ships starting points Claude can adapt, in `skills/<name>/assets/`:
 
-- **web-standards:** security headers for `next.config.ts`, a CSP proxy with nonces, `.gitignore`, Dependabot, pre-commit secret scanning, Lighthouse CI, an axe accessibility test, an ADR template, and a GitHub Actions workflow that runs these audits on every PR and shows the findings in code scanning (`ci-stack-audit.yml`).
+- **web-standards:** security headers for `next.config.ts`, a CSP proxy with nonces, `.gitignore`, Dependabot, pre-commit secret scanning, Lighthouse CI, an axe accessibility test, an ADR template, and a GitHub Actions workflow that runs the web, database and container audits on every PR and shows the findings in code scanning (`ci-stack-audit.yml`).
 - **container-standards:** Dockerfiles for Next.js standalone and for a Node service, a hardened Compose file, `.dockerignore`, `daemon.json` with log rotation, a CI image-scan workflow.
 
 ## What has been measured

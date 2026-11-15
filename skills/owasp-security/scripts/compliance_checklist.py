@@ -5,8 +5,8 @@
                                    [--config FILE] [--format md|json] [--out FILE] [--clone PATH] [--data-dir DIR] [--asvs PATH]
 
 1. map_controls decides which ASVS 5.0 sections apply to the project.
-2. Evidence: unless --no-run, runs web-standards `--phase review` and (if Docker files exist) container-standards
-   `--phase build`. Both are local static audits: no network. Add more with --evidence (JSON from any run_audit.py,
+2. Evidence: unless --no-run, runs web-standards `--phase review`, data-standards (if a database is used) and (if Docker files exist) container-standards
+   `--phase build`. All are local static audits: no network. Add more with --evidence (JSON from any run_audit.py,
    e.g. a publish run with --url).
 3. Status per section: `not met` (error findings), `partial` (warn findings), else `not assessed`. A clean audit is
    never `met`: it lists which automated checks ran without findings, and a human or Claude finishes the assessment.
@@ -36,20 +36,22 @@ from wclib.walker import run_git
 PLUGIN = Path(__file__).resolve().parents[3]
 WEB = PLUGIN / "skills" / "web-standards"
 CONTAINER = PLUGIN / "skills" / "container-standards"
+DATA = PLUGIN / "skills" / "data-standards"
 CONTAINER_PREFIXES = ["img", "run", "cnet", "csec", "sup", "ops", "cool"]
+DATA_PREFIXES = ["dbs", "dbm", "dbo"]
 ORDER = {"not met": 0, "partial": 1, "not assessed": 2}
 DISCLAIMER = ("This is a self-assessment against OWASP ASVS 5.0. It is not an audit, certification, "
               "or attestation of compliance.")
 
 
-def run_audit(script: Path, root: str, phase: str, config: str | None) -> Report:
-    cmd = [sys.executable, str(script), "--root", root, "--phase", phase, "--format", "json"]
+def run_audit(script: Path, root: str, phase: str | None, config: str | None) -> Report:
+    cmd = [sys.executable, str(script), "--root", root, *(["--phase", phase] if phase else []), "--format", "json"]
     if config:
         cmd += ["--config", config]
     res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if not res.stdout.strip().startswith("{"):
         r = Report(tool=script.parent.parent.name, root=root)
-        r.skipped.append(f"{script.parent.parent.name} {phase} failed: {res.stderr.strip()[-200:]}")
+        r.skipped.append(f"{script.parent.parent.name} {phase or ''} failed: {res.stderr.strip()[-200:]}")
         return r
     return Report.from_json(res.stdout)
 
@@ -59,6 +61,8 @@ def prefixes_run(rep: Report) -> set[str]:
         return set(rep.meta["domains"])
     if rep.tool.startswith("container-standards"):
         return set(CONTAINER_PREFIXES)
+    if rep.tool.startswith("data-standards"):
+        return set(DATA_PREFIXES)
     return {f.rule.split(".")[0] for f in rep.findings}
 
 
@@ -248,7 +252,10 @@ def main() -> int:
         if cm.container_root:
             reports.append(run_audit(CONTAINER / "scripts" / "run_audit.py", cm.container_root, "build", args.config))
             sources.append("container-standards build (static)")
-    books = [RuleBook(WEB), RuleBook(CONTAINER)]
+        if "db" in cm.signals:
+            reports.append(run_audit(DATA / "scripts" / "run_audit.py", str(root), None, args.config))
+            sources.append("data-standards (static)")
+    books = [RuleBook(WEB), RuleBook(CONTAINER), RuleBook(DATA)]
     asvs_data, asvs_note = asvs.try_load(args.asvs, config)
     rows = assess(cm, reports, books, catalog, asvs_data, level)
     project_commit = (run_git(root.resolve(), "rev-parse", "HEAD") or "").strip() or None

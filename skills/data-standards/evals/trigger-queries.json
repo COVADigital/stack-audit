@@ -1,0 +1,12 @@
+[
+  {"query": "is drizzle/0003_add_orders.sql safe to run on prod? the orders table is huge", "should_trigger": true},
+  {"query": "review my drizzle schema in src/db/schema.ts, do my foreign keys need indexes?", "should_trigger": true},
+  {"query": "should we use drizzle-kit push or migrate in our coolify deploy?", "should_trigger": true},
+  {"query": "prisma generated a migration that drops a column, how do I do this without downtime", "should_trigger": true},
+  {"query": "our next.js api route creates a new postgres() client per request, is that a problem", "should_trigger": true},
+  {"query": "can you check our database setup before launch: migrations, roles, ssl", "should_trigger": true},
+  {"query": "add a dark mode toggle to the navbar", "should_trigger": false},
+  {"query": "is our compose file exposing postgres port 5432 to the internet?", "should_trigger": false},
+  {"query": "what does OWASP say about SQL injection prevention? I need the cheat sheet section", "should_trigger": false},
+  {"query": "this server action builds SQL with string concatenation, is that injectable?", "should_trigger": false}
+]

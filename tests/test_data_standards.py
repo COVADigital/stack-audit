@@ -217,7 +217,7 @@ class DbOpsAuditTests(Case):
         self.assertEqual(files("dbo.01"), [".github/workflows/ci.yml", "Dockerfile", "package.json"])
         self.assertEqual([f["message"] for f in self.found(d, "dbo.01", "package.json")],
                          ["package.json script `deploy` runs drizzle-kit push"])  # not the dev-only db:push
-        self.assertEqual(files("dbo.02"), [".github/workflows"])
+        self.assertEqual(files("dbo.02"), [".github/workflows/ci.yml"])
         self.assertEqual(files("dbo.03"), [".env.example", "src/db/index.ts"])   # never the real .env, not localhost
         self.assertEqual(files("dbo.04"), [".env.example", "compose.yaml"])      # not the local URL or dev compose
         self.assertEqual(len(self.found(d, "dbo.04", ".env.example")), 1)

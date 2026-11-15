@@ -102,11 +102,50 @@ class ChecklistTests(MiniClone):
         self.assertIn("V3.3", res.stdout)
 
 
+DATA_ASVS_INDEX = """# ASVS Index
+
+## V11: Cryptography
+
+### V11.4 Hashing and Hash-based Functions
+
+[Password Storage Cheat Sheet](cheatsheets/Password_Storage_Cheat_Sheet.md)
+
+## V13: Configuration
+
+### V13.2 Backend Communication Configuration
+
+[Database Security Cheat Sheet](cheatsheets/Database_Security_Cheat_Sheet.md)
+"""
+
+
+class DataStandardsEvidenceTests(MiniClone):
+    def setUp(self):
+        super().setUp()
+        self.write("clone/IndexASVS.md", DATA_ASVS_INDEX)
+        self.write("clone/cheatsheets/Password_Storage_Cheat_Sheet.md", "# Password Storage Cheat Sheet\n\n## Introduction\n")
+        self.write("clone/cheatsheets/Database_Security_Cheat_Sheet.md", "# Database Security Cheat Sheet\n\n## Introduction\n")
+        self.write("app/package.json", json.dumps({"dependencies": {"next": "16.0.0", "drizzle-orm": "0.45.0"}}))
+        self.write("app/src/db/schema.ts", "import { pgTable, integer, text } from 'drizzle-orm/pg-core';\n"
+                                           "export const users = pgTable('users', { id: integer().primaryKey(), password: text('password') });\n")
+        self.write("app/compose.yaml", "services:\n  app:\n    image: app:1\n    environment:\n"
+                                       "      DATABASE_URL: postgres://postgres:${PW}@db:5432/app\n")
+
+    def test_data_audit_runs_and_maps_to_asvs(self):
+        res = self.run_script("compliance_checklist.py", "--root", str(self.dir / "app"), "--format", "json")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        data = json.loads(res.stdout)
+        self.assertIn("data-standards (static)", data["evidence"])
+        rows = {r["code"]: r for r in data["sections"]}
+        self.assertEqual(rows["V11.4"]["status"], "partial")                   # dbs.06 (warn)
+        self.assertIn("dbs.06", [f["rule"] for f in rows["V11.4"]["findings"]])
+        self.assertIn("dbo.04", [f["rule"] for f in rows["V13.2"]["findings"]])  # info: listed, status unchanged
+
+
 class DataIntegrityTests(unittest.TestCase):
     """Every sheet, ASVS section, requirement and rule named in controls.py must exist."""
 
     def test_rules_exist(self):
-        books = [RuleBook(PLUGIN_ROOT / "skills" / s) for s in ("web-standards", "container-standards")]
+        books = [RuleBook(PLUGIN_ROOT / "skills" / s) for s in ("web-standards", "container-standards", "data-standards")]
         known = {f"{p}.{nn}" for rb in books for p, rules in rb.rules.items() for nn in rules}
         self.assertEqual(sorted(set(EVIDENCE) - known), [])
         self.assertEqual(sorted({r for r, _, _ in REQUIREMENT_EVIDENCE} - known), [])

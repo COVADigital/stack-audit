@@ -2,7 +2,8 @@
 # Runs the stack-audit scripts (Python standard library only, no network) on every PR, shows findings
 # in GitHub code scanning, and fails the job on error-level findings.
 # Before use: replace <stack-audit-commit-sha> with a full commit SHA from github.com/COVADigital/stack-audit.
-# Delete the container step if the repo has no Dockerfile or Compose file.
+# Delete the container lines if the repo has no Dockerfile or Compose file, and the database lines if it has no
+# Postgres/Drizzle schema or SQL migrations. The database audit only reads files; it never connects to a database.
 name: stack-audit
 
 on:
@@ -41,6 +42,8 @@ jobs:
             --format sarif --out web.sarif --strict || status=1
           python stack-audit/skills/container-standards/scripts/run_audit.py --root app --phase build \
             --format sarif --out containers.sarif --strict || status=1
+          python stack-audit/skills/data-standards/scripts/run_audit.py --root app \
+            --format sarif --out database.sarif --strict || status=1
           exit $status
       - name: Upload web findings
         if: always() && hashFiles('web.sarif') != ''
@@ -55,4 +58,11 @@ jobs:
         with:
           sarif_file: containers.sarif
           category: stack-audit-containers
+          checkout_path: app
+      - name: Upload database findings
+        if: always() && hashFiles('database.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: database.sarif
+          category: stack-audit-database
           checkout_path: app

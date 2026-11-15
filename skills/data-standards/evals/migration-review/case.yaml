@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: migration-review
+expected_outcome: |
+  Explains that the migration fails on a table with rows (NOT NULL column without a DEFAULT), that DROP COLUMN loses data
+  and breaks the running app version, and that a plain CREATE INDEX blocks writes on a 2M-row table; proposes the safe
+  sequence and runs no migration, drizzle-kit or database command.
+context:
+  scaffold_script: place-files.sh

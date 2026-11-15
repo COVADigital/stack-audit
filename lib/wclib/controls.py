@@ -92,6 +92,7 @@ EVIDENCE: dict[str, tuple[str, ...]] = {
     "csec.01": ("V13.3",), "csec.02": ("V13.3",), "csec.03": ("V13.3",), "csec.04": ("V13.3",), "csec.05": ("V13.3",),
     "csec.06": ("V13.3",), "csec.07": ("V13.2",), "host.02": ("V13.2",), "host.06": ("V13.2",), "cool.01": ("V13.2",), "cool.02": ("V13.2",),
     "cool.04": ("V13.3",), "cool.05": ("V13.2",),
+    "dbs.06": ("V11.4",), "dbo.03": ("V12.3",), "dbo.04": ("V13.2",),
 }
 
 
@@ -138,6 +139,10 @@ REQUIREMENT_EVIDENCE: list[tuple[str, str | None, tuple[str, ...]]] = [
     ("csec.05", None, ("V13.3.1",)),
     ("csec.07", None, ("V13.2.1",)),
     ("sup.01", None, ("V15.2.1",)),
+    ("dbs.06", None, ("V11.4.2",)),
+    ("dbo.03", r"disables SSL", ("V12.3.1",)),
+    ("dbo.03", r"certificate verification", ("V12.3.2",)),
+    ("dbo.04", None, ("V13.2.2",)),
 ]
 
 
