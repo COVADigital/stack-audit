@@ -56,7 +56,8 @@ def findings_for(payload: dict) -> tuple[str, list[dict]]:
     script = script_for(file.name)
     if script is None or not file.is_file():
         return "", []
-    root = project_root(file, Path(payload.get("cwd") or os.getcwd()).resolve())
+    cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
+    root = project_root(file, cwd)
     if not enabled(root):
         return "", []
     rel = file.relative_to(root).as_posix()
@@ -66,7 +67,9 @@ def findings_for(payload: dict) -> tuple[str, list[dict]]:
         return rel, []
     data = json.loads(res.stdout)
     # Only this file's own error-level findings; project-wide ones (headers, lockfile) belong to a full audit.
-    return rel, [f for f in data.get("findings", []) if f.get("file") == rel and f.get("severity") == "error"]
+    found = [f for f in data.get("findings", []) if f.get("file") == rel and f.get("severity") == "error"]
+    # Outside the session folder the root is the file's own folder, so rel is a bare name: show the full path.
+    return (rel if root == cwd else str(file)), found
 
 
 def message(rel: str, found: list[dict]) -> str:

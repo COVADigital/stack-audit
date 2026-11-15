@@ -134,11 +134,11 @@ class PostEditHookTests(unittest.TestCase):
         import shutil
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def run_hook(self, rel, content, env=None, tool="Write"):
+    def run_hook(self, rel, content, env=None, tool="Write", cwd=None):
         f = self.dir / rel
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(content, encoding="utf-8")
-        payload = {"hook_event_name": "PostToolUse", "tool_name": tool, "cwd": str(self.dir),
+        payload = {"hook_event_name": "PostToolUse", "tool_name": tool, "cwd": str(cwd or self.dir),
                    "tool_input": {"file_path": str(f)}}
         res = subprocess.run([sys.executable, str(EDIT_HOOK)], input=json.dumps(payload), capture_output=True,
                              text=True, encoding="utf-8", env={**os.environ, **(env or {})}, timeout=60)
@@ -160,6 +160,15 @@ class PostEditHookTests(unittest.TestCase):
         self.assertIn("app/u/page.tsx", ctx)
         self.assertNotIn("other.ts", ctx)
         self.assertNotIn("sec.03", ctx)  # project-wide header findings stay out
+
+    def test_file_outside_session_folder_shows_full_path(self):
+        other = Path(tempfile.mkdtemp(prefix="wc-cwd-"))
+        try:
+            ctx = self.run_hook("app/x/page.tsx", "export const f = (c) => eval(c);\n", cwd=other)
+        finally:
+            import shutil
+            shutil.rmtree(other, ignore_errors=True)
+        self.assertIn(str((self.dir / "app" / "x" / "page.tsx").resolve()), ctx)
 
     def test_clean_file_and_other_types_are_silent(self):
         self.assertEqual(self.run_hook("app/ok.tsx", "export const A = () => <p>hi</p>;\n", tool="Edit"), "")
