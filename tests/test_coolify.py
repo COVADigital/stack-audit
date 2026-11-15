@@ -197,10 +197,48 @@ class CoolifyAddonTests(TempRepo):
             self.assertEqual(env_file.stat().st_mode & 0o777, 0o600)
 
     def test_status_reports_clients_without_running_them(self):
-        with mock.patch.object(coolify_addon.shutil, "which", lambda name: None):
+        env = {"HOME": str(self.dir), "USERPROFILE": str(self.dir), "CODEX_HOME": str(self.dir / ".codex"),
+               "COOLIFY_TOKEN": ""}
+        with mock.patch.dict(os.environ, env), mock.patch.object(coolify_addon.shutil, "which", lambda name: None), \
+                mock.patch.object(coolify_addon, "token_saved", lambda: False):
             self.assertEqual(coolify_addon.client_status(), {"claude": {"cli": False, "server": False},
                                                              "codex": {"cli": False, "server": False}})
-            self.assertIn("not found", coolify_addon.verify())
+            self.assertIn("set-token", coolify_addon.verify())
+
+    def test_server_detected_from_config_files(self):
+        # Codex's sandbox can't run `codex mcp get`, so detection reads the config files (names only).
+        env = {"HOME": str(self.dir), "USERPROFILE": str(self.dir), "CODEX_HOME": str(self.dir / ".codex")}
+        env.pop("CLAUDE_CONFIG_DIR", None)
+        with mock.patch.dict(os.environ, env):
+            os.environ.pop("CLAUDE_CONFIG_DIR", None)
+            self.assertFalse(coolify_addon.has_server("codex"))
+            self.write(".codex/config.toml", '[mcp_servers.context7]\nurl = "x"\n\n[mcp_servers.coolify]\n'
+                                             'url = "https://c.example.com/mcp"\nbearer_token_env_var = "COOLIFY_TOKEN"\n')
+            self.assertTrue(coolify_addon.has_server("codex"))
+            self.write(".claude.json", json.dumps({"projects": {"E:/x": {"mcpServers": {"coolify": {"type": "http"}}}}}))
+            self.assertTrue(coolify_addon.has_server("claude"))
+            self.write(".claude.json", json.dumps({"mcpServers": {"other": {}}}))
+            self.assertFalse(coolify_addon.has_server("claude"))
+            with mock.patch.object(coolify_addon.shutil, "which", lambda name: None), \
+                    mock.patch.object(coolify_addon, "token_saved", lambda: True):
+                os.environ["COOLIFY_TOKEN"] = ""
+                out = coolify_addon.verify()
+            self.assertIn("terminal was opened before", out)
+            self.assertIn("Codex: 'coolify' server configured", out)
+
+    def test_restart_codex_daemon_passes_token_env(self):
+        calls = []
+        fake = lambda *args, env=None, timeout=60: (calls.append((args, env.get("COOLIFY_TOKEN"))), (0, ""))[1]  # noqa: E731
+        with mock.patch.object(coolify_addon, "cli", fake):
+            out = coolify_addon.restart_codex_daemon("1|abc")
+        self.assertEqual(calls, [(("codex", "app-server", "daemon", "stop"), "1|abc"),
+                                 (("codex", "app-server", "daemon", "start"), "1|abc")])
+        self.assertIn("restarted", out)
+        self.assertNotIn("1|abc", out)
+
+    def test_load_hint(self):
+        self.assertIn("GetEnvironmentVariable('COOLIFY_TOKEN', 'User')", coolify_addon.load_hint(windows=True))
+        self.assertIn("coolify.env", coolify_addon.load_hint(windows=False))
 
 
 class CoolifyContentTests(unittest.TestCase):

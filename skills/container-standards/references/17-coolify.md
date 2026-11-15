@@ -115,7 +115,9 @@ Where a step says AskUserQuestion: in Claude Code use that tool; in Codex and ot
    - **I'll set `COOLIFY_TOKEN` myself.**
 
    `set-token` stores `COOLIFY_TOKEN` as a user environment variable (Windows: user environment in the registry; macOS/Linux: `~/.config/stack-audit/coolify.env`, mode 0600, sourced from `~/.zshrc` or `~/.bashrc`). It then checks that Claude Code connects, without printing the config.
-5. Tell them to restart Claude Code and Codex from a new terminal, then check `/mcp`. `coolify_addon.py verify` re-checks the connection. If it fails, check the URL, the token, and that the API is enabled in Coolify's settings.
+5. Tell them to restart Claude Code and Codex from a new terminal, then check `/mcp`. On Windows, a new tab in an already-running Windows Terminal still has the old environment. To keep the current terminal (and resume the session with `claude --continue` or `codex resume --last`), run the line `verify` prints first. In PowerShell that is `$env:COOLIFY_TOKEN = [Environment]::GetEnvironmentVariable('COOLIFY_TOKEN', 'User')`. Codex also keeps a background app-server (and VS Code / the Codex desktop app run their own) that starts MCP servers, so a new terminal is not enough. If Codex's `/mcp` shows `coolify: failed` and its log says `Environment variable COOLIFY_TOKEN ... is not set`, the user runs `codex app-server daemon stop` and then `codex app-server daemon start` from a terminal that has the variable, then restarts VS Code or the desktop app. When the user runs `set-token` in their own terminal, it offers to do this restart for them (with the token loaded). This interrupts running Codex sessions, so only the user starts it, never the agent. `coolify_addon.py verify` reports whether the token is visible and each client's server. If the connection still fails, check the URL, the token, and that the API is enabled in Coolify's settings.
+
+In Codex, `coolify_addon.py set` and `set-token` write outside the project (`~/.claude/data/stack-audit/`, the user environment), so Codex's sandbox asks for approval. That is expected.
 
 ### Collect a snapshot (read tools only)
 
