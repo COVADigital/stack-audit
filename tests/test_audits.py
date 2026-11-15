@@ -287,6 +287,21 @@ jobs:
         self.assertTrue(any("Secret-like file is tracked" in m for m in self.messages(d, "git.04")))
         self.assertTrue(any("pull_request_target" in m for m in self.messages(d, "git.08")))
 
+    def test_signing_and_merged_branches(self):
+        self.init_git()
+        self.write("a.txt", "x")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "init")
+        self.git("branch", "feat-done")
+        d = self.run_audit()
+        self.assertTrue(any("signing is not enabled" in m for m in self.messages(d, "git.01")))
+        self.assertTrue(any("feat-done" in m for m in self.messages(d, "git.10")))
+        self.git("config", "commit.gpgsign", "true")
+        self.git("branch", "-d", "feat-done")
+        d = self.run_audit()
+        self.assertFalse(any("signing is not enabled" in m for m in self.messages(d, "git.01")))
+        self.assertEqual(self.messages(d, "git.10"), [])
+
     def test_good_repo(self):
         self.init_git()
         self.write("package.json", PKG)

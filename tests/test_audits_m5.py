@@ -87,6 +87,32 @@ export function List({ rows }) {
 class NetworkingTests(Case):
     script = "audit_networking.py"
 
+    def test_cache_control_streams_retries_rate_limits(self):
+        self.write("app/api/items/route.ts", "export async function GET() { return Response.json([]); }\n")
+        self.write("app/api/public/route.ts", "export async function GET() {\n"
+                   "  return Response.json([], { headers: { 'Cache-Control': 'public, s-maxage=60' } });\n}\n")
+        self.write("lib/stream.ts", "export const s = new ReadableStream({ start(c) {\n"
+                   "  const id = setInterval(() => c.enqueue('x'), 1000);\n  return () => clearInterval(id);\n} });\n")
+        self.write("lib/stream-ok.ts", "export const s = new ReadableStream({ start(c) { id = setInterval(tick, 1000); },\n"
+                   "  cancel() { clearInterval(id); } });\n")
+        self.write("lib/pay.ts", "export async function pay(body) {\n  for (let attempt = 0; attempt < 3; attempt++) {\n"
+                   "    const r = await fetch('/api/pay', { method: 'POST', body });\n    if (r.ok) return r;\n  }\n}\n")
+        self.write("lib/pay-ok.ts", "export async function pay(body, key) {\n  for (let attempt = 0; attempt < 3; attempt++) {\n"
+                   "    const r = await fetch('/api/pay', { method: 'POST', body, headers: { 'Idempotency-Key': key } });\n"
+                   "    if (r.ok) return r;\n  }\n}\n")
+        self.write("app/api/login/route.ts", "export async function POST(req) { return Response.json(await signIn(req)); }\n")
+        self.write("app/api/contact/route.ts", "export async function POST(req) {\n"
+                   "  await ratelimit.limit(ip(req));\n  return Response.json({});\n}\n")
+        d = self.run_audit()
+        self.assertIn("net.02", self.rules(d, "items/route.ts"))
+        self.assertNotIn("net.02", self.rules(d, "public/route.ts"))
+        self.assertIn("net.08", self.rules(d, "stream.ts"))
+        self.assertNotIn("net.08", self.rules(d, "stream-ok.ts"))
+        self.assertIn("net.09", self.rules(d, "lib/pay.ts"))
+        self.assertNotIn("net.09", self.rules(d, "pay-ok.ts"))
+        self.assertIn("net.15", self.rules(d, "login/route.ts"))
+        self.assertNotIn("net.15", self.rules(d, "contact/route.ts"))
+
     def test_fetch_effects_loops_handlers(self):
         self.write("app/c.tsx", """'use client';
 export function C() {
@@ -220,6 +246,17 @@ export async function priv() { 'use cache: private'; const c = await cookies(); 
         self.assertNotIn("`good`", m)
         self.assertNotIn("`priv`", m)
         self.assertIn("['me']", m)
+
+    def test_service_workers(self):
+        self.write("public/sw.js", "self.addEventListener('fetch', (e) => {});\n"
+                   "self.addEventListener('install', () => caches.open('static'));\n")
+        self.write("src/worker.ts", "import { Serwist } from 'serwist';\nself.addEventListener('fetch', handle);\n"
+                   "caches.open('app-v3');\ncaches.delete('app-v2');\n")
+        d = self.run_audit()
+        self.assertIn("cache.02", self.rules(d, "sw.js"))
+        self.assertIn("cache.03", self.rules(d, "sw.js"))
+        self.assertNotIn("cache.02", self.rules(d, "worker.ts"))
+        self.assertNotIn("cache.03", self.rules(d, "worker.ts"))
 
 
 class ArchitectureTests(Case):

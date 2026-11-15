@@ -15,7 +15,7 @@ All scripts are read-only: they never modify the audited repository.
 
 import sys
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 # Reports are UTF-8 everywhere. Before Python 3.15, Windows writes piped output in the ANSI
 # code page (cp1252), which callers reading UTF-8 (run_audit.py, the hooks, CI) can't decode.

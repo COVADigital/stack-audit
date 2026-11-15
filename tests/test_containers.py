@@ -137,6 +137,7 @@ class DockerfileAuditTests(AuditCase):
         self.write("app/package.json", json.dumps({"dependencies": {"next": "16.0.0"}}))
         self.write("app/Dockerfile", """FROM node:latest
 ARG NPM_TOKEN
+ARG NEXT_PUBLIC_API_URL
 ENV API_SECRET=abc
 ADD src /app
 COPY .env /app/.env
@@ -151,8 +152,9 @@ CMD node server.js
         d = self.run_script("audit_dockerfile.py")
         rules = self.rules(d)
         for r in ("img.01", "img.02", "img.03", "img.04", "img.05", "img.06", "img.07", "img.08", "img.09", "img.10",
-                  "csec.04", "csec.05", "csec.06"):
+                  "csec.04", "csec.05", "csec.06", "img.11", "sup.05"):
             self.assertIn(r, rules, r)
+        self.assertTrue(any("NEXT_PUBLIC_API_URL" in m for m in self.msgs(d, "img.11")))
         self.assertTrue(any("deleted later" in m for m in self.msgs(d, "csec.05")))
         self.assertEqual(len(self.msgs(d, "csec.04")), 2)
 
@@ -161,9 +163,12 @@ CMD node server.js
         shutil.copy(SKILL / "assets" / "dockerignore.node", self.dir / ".dockerignore")
         self.write("package.json", json.dumps({"dependencies": {"next": "16.0.0"}}))
         self.write("next.config.ts", "export default { output: 'standalone' }")
+        self.write(".github/dependabot.yml", "version: 2\nupdates:\n  - package-ecosystem: docker\n    directory: /\n")
         d = self.run_script("audit_dockerfile.py")
         bad = [f for f in d["findings"] if f["severity"] in ("error", "warn")]
         self.assertEqual(bad, [])
+        self.assertNotIn("sup.05", self.rules(d))
+        self.assertNotIn("img.11", self.rules(d))
 
 
 class ComposeAuditTests(AuditCase):
@@ -194,7 +199,8 @@ services:
         d = self.run_script("audit_compose.py")
         rules = self.rules(d)
         for r in ("ops.06", "img.01", "cnet.02", "cnet.03", "csec.01", "csec.03", "run.01", "run.03", "run.05", "run.08",
-                  "run.09", "run.06", "run.04", "ops.01", "ops.03", "ops.04", "ops.05", "ops.07", "cnet.01", "csec.02"):
+                  "run.09", "run.06", "run.04", "ops.01", "ops.03", "ops.04", "ops.05", "ops.07", "cnet.01", "csec.02",
+                  "run.02"):
             self.assertIn(r, rules, r)
         self.assertTrue(all("hunter2" not in f["message"] for f in d["findings"]))  # values never printed
 

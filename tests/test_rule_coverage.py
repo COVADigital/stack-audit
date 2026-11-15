@@ -19,10 +19,10 @@ CROSS_REF = {"net.14": "sec.04", "cache.05": "sec.07"}
 # Reported by a script but no test yet. Shrink-only: the test fails when an entry gains a test.
 UNTESTED = {
     "a11y.11", "a11y.16", "a11y.18", "a11y.19", "arch.01", "arch.09", "arch.14", "arch.17", "arch.21",
-    "cache.02", "cache.03", "cache.08", "cache.10", "cache.13", "cache.16", "cache.17", "git.01", "git.02",
-    "git.10", "img.11", "net.02", "net.03", "net.08", "net.09", "net.15", "net.20", "perf.10", "perf.15",
-    "perf.19", "ren.04", "ren.06", "ren.09", "ren.11", "ren.14", "ren.18", "ren.19", "run.02", "state.06",
-    "state.12", "state.19", "sup.01", "sup.02", "sup.05",
+    "cache.08", "cache.10", "cache.13", "cache.16", "cache.17", "git.02",
+    "net.03", "net.20", "perf.10", "perf.15",
+    "perf.19", "ren.04", "ren.06", "ren.09", "ren.11", "ren.14", "ren.18", "ren.19", "state.06",
+    "state.12", "state.19", "sup.01", "sup.02",
 }
 
 
