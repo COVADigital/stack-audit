@@ -59,13 +59,13 @@ Produce a short decision record for the PR description or the route header (temp
 
 ## 3. Review phase
 
-**Automated audits** (read-only; `S=${CLAUDE_PLUGIN_ROOT}/skills/web-standards/scripts`). Start with the orchestrator:
+**Automated audits** (read-only). Run each script as **one command with this full path** (no `S=` variable, `cd`, `&&` or pipes), so it matches the skill's pre-approved commands and runs without a permission prompt. Start with the orchestrator:
 
 ```bash
-python $S/run_audit.py --root <app> --phase review [--changed] --format json   # all 9 domains, merged + de-duplicated
-python $S/run_audit.py --root <app> --phase publish [--url https://…]          # + build output (bundle budgets, bundle secrets) + live headers
-python $S/run_audit.py --root <app> --phase scope                               # stack profile + route inventory
-python $S/run_audit.py --root <app> --domain sec,a11y                           # a subset
+python ${CLAUDE_PLUGIN_ROOT}/skills/web-standards/scripts/run_audit.py --root <app> --phase review [--changed] --format json   # all 9 domains, merged + de-duplicated
+python ${CLAUDE_PLUGIN_ROOT}/skills/web-standards/scripts/run_audit.py --root <app> --phase publish [--url https://…]          # + build output (bundle budgets, bundle secrets) + live headers
+python ${CLAUDE_PLUGIN_ROOT}/skills/web-standards/scripts/run_audit.py --root <app> --phase scope                               # stack profile + route inventory
+python ${CLAUDE_PLUGIN_ROOT}/skills/web-standards/scripts/run_audit.py --root <app> --domain sec,a11y                           # a subset
 ```
 
 Single domains: `audit_security.py` (sec), `audit_git.py` (git), `audit_a11y_i18n.py` (a11y + contrast + message keys), `audit_rendering.py` (ren + **route inventory**), `audit_networking.py` (net), `audit_performance.py` (perf; `--build` = per-route gzipped initial JS vs budget), `audit_caching.py` (cache), `audit_architecture.py` (arch; import cycles, boundaries, env docs), `audit_state.py` (state), `probe_headers.py --url` (live cache/security headers), `contrast.py "#777" "#fff"`.

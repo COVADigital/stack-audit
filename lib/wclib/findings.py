@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Iterable
+from urllib.parse import quote
 
 SEVERITIES = ("error", "warn", "info")
 CONFIDENCES = ("high", "medium", "low")
@@ -222,6 +225,14 @@ class Report:
             out.append("")
         return "\n".join(out)
 
+    def _sarif_anchor(self) -> str:
+        """A file that exists at the report root, for findings that have no file of their own."""
+        root = Path(self.root) if self.root else None
+        for name in ("package.json", "compose.yaml", "docker-compose.yml", "Dockerfile", "README.md"):
+            if root and (root / name).is_file():
+                return name
+        return "README.md"
+
     def to_sarif(self) -> str:
         rules: dict[str, dict] = {}
         results = []
@@ -237,11 +248,17 @@ class Report:
                 "message": {"text": f.message + (f" Fix: {f.fix_hint}" if f.fix_hint else "")},
                 "partialFingerprints": {"wcFingerprint": f.fingerprint()},
             }
-            if f.file:
-                loc: dict = {"artifactLocation": {"uri": f.file}}
+            # GitHub code scanning rejects a whole upload if any result lacks a location, so project-level
+            # findings (and container:/image: targets, which aren't repo files) are anchored to a repo file.
+            if f.file and not re.match(r"^[a-z]+:", f.file):
+                loc: dict = {"artifactLocation": {"uri": quote(f.file.replace("\\", "/"), safe="/")}}
                 if f.line:
                     loc["region"] = {"startLine": f.line}
-                result["locations"] = [{"physicalLocation": loc}]
+            else:
+                loc = {"artifactLocation": {"uri": quote(self._sarif_anchor(), safe="/")}, "region": {"startLine": 1}}
+                where = f"{f.file}: " if f.file else ""
+                result["message"]["text"] = f"(project-level) {where}{result['message']['text']}"
+            result["locations"] = [{"physicalLocation": loc}]
             results.append(result)
         sarif = {
             "$schema": "https://json.schemastore.org/sarif-2.1.0.json",

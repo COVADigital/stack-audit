@@ -4,4 +4,4 @@ focus: trace
 weight: 1
 ---
 
-The answer includes a link for the ASVS citation that the scripts printed (a github.com/OWASP/ASVS URL for the 5.0 release, pointing at the V3.3 Cookie Setup section), or, when the file is missing, the cheat sheet links the scripts printed for V3.3.
+If the skill's scripts printed ASVS output (read_requirement.py or find_sheets.py --asvs), the answer includes the citation link they printed: a github.com/OWASP/ASVS URL at the v5.0.0_release tag pointing at the V3.3 Cookie Setup section. If the scripts reported that the OWASP data (cheat sheet clone or ASVS file) is missing, the answer instead gives no ASVS or OWASP link that the scripts did not print (or clearly labels any such link as unverified) and says how to enable verified citations.

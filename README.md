@@ -61,6 +61,24 @@ To try it without installing, clone the repository and start Claude Code with:
 claude --plugin-dir path/to/stack-audit
 ```
 
+### Permissions
+
+In Claude Code's default permission mode, loading a skill needs your approval, so the first time a skill applies Claude asks before using it. The audit scripts inside each skill are pre-approved and then run without further prompts. To approve the three skills up front, add this to `~/.claude/settings.json` (or a project's `.claude/settings.json`):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Skill(stack-audit:web-standards)",
+      "Skill(stack-audit:container-standards)",
+      "Skill(stack-audit:owasp-security)"
+    ]
+  }
+}
+```
+
+With `claude -p` (scripts, CI), nothing can prompt you, so pass the same rules with `--allowedTools`. Otherwise the skills are blocked and Claude answers without the standards or the audits.
+
 ### One-time setup for `owasp-security`
 
 The OWASP skill reads a local clone of the cheat sheets. Nothing is downloaded when you install the plugin. The first time you ask an OWASP question without the clone, Claude tells you it's missing and offers to run the command below; it runs only if you agree. You can also clone it yourself beforehand:

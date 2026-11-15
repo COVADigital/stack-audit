@@ -74,8 +74,28 @@ class ReportTests(unittest.TestCase):
         results = data["runs"][0]["results"]
         self.assertEqual(results[0]["level"], "error")
         self.assertEqual(results[0]["locations"][0]["physicalLocation"]["region"]["startLine"], 3)
-        self.assertNotIn("locations", results[2])  # project-level finding
+        # Found by running the CI template on GitHub: one result without a location makes code scanning
+        # reject the whole upload, so every result needs one.
+        self.assertTrue(all(r.get("locations") for r in results))
+        self.assertEqual(results[2]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "README.md")
+        self.assertTrue(results[2]["message"]["text"].startswith("(project-level) "))
         self.assertEqual(len(data["runs"][0]["tool"]["driver"]["rules"]), 3)
+
+    def test_sarif_uris_and_anchors(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "package.json").write_text("{}", encoding="utf-8")
+            r = Report(tool="t", root=d)
+            r.add(Finding("sec.01", "error", "xss", file="app/u/[name]/page.tsx", line=4))
+            r.add(Finding("sec.03", "warn", "No CSP"))
+            r.add(Finding("run.03", "error", "privileged", file="container:app"))
+            res = json.loads(r.to_sarif())["runs"][0]["results"]
+        uris = {x["ruleId"]: x["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for x in res}
+        self.assertEqual(uris["sec.01"], "app/u/%5Bname%5D/page.tsx")  # brackets are not valid in a URI
+        self.assertEqual(uris["sec.03"], "package.json")  # anchored to a file that exists at the root
+        self.assertEqual(uris["run.03"], "package.json")
+        self.assertIn("container:app", next(x for x in res if x["ruleId"] == "run.03")["message"]["text"])
 
     def test_merge(self):
         a, b = sample_report(), Report(tool="b", root="/repo", skipped=["x"], suppressed=2)
