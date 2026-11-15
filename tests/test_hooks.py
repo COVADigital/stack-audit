@@ -12,6 +12,13 @@ HOOK = ROOT / "hooks" / "session_start.py"
 
 
 class SessionStartHookTests(unittest.TestCase):
+    def test_versions_match(self):
+        # Installed copies are cached per plugin.json version: an unchanged version never reaches users.
+        sys.path.insert(0, str(ROOT / "lib"))
+        import wclib
+        manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["version"], wclib.__version__)
+
     def test_hooks_json_points_at_existing_script(self):
         cfg = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         cmd = cfg["hooks"]["SessionStart"][0]["hooks"][0]["command"]
