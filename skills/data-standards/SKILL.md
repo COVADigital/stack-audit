@@ -6,6 +6,8 @@ allowed-tools: Bash(python ${CLAUDE_PLUGIN_ROOT}/skills/data-standards/scripts/*
 
 # Data Standards
 
+> **Codex and other agents:** `${CLAUDE_PLUGIN_ROOT}` in the commands below is the plugin root, two folders above this SKILL.md (the session-start hook also prints it as "Plugin root"). Claude Code fills it in; elsewhere, substitute the absolute path.
+
 Every **Rule** in `references/` is a requirement. Findings cite rule IDs such as `dbm.02` (section 02 of `21-migration-safety.md`). `references/rule-index.md` lists all 25 rules and how each one is checked.
 
 | Prefix | Reference | Covers |

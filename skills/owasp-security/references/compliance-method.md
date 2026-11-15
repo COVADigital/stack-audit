@@ -38,7 +38,7 @@ Rules:
 
 ## 4. Report shape
 
-1. **Header:** "ASVS 5.0 Level N self-assessment", repo, commit, date, catalog commit, assessor ("Claude, with …").
+1. **Header:** "ASVS 5.0 Level N self-assessment", repo, commit, date, catalog commit, assessor ("<agent, e.g. Claude Code or Codex>, with …").
 2. **Summary:** count of sections by status, the number of requirements to assess (requirement level), plus the top 5 gaps by risk.
 3. **Per chapter:** a table using the fields above, gaps first.
 4. **Requirements checklist** (requirement level only): per section, its citation link, related evidence, and the requirements at L1–LN.

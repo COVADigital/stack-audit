@@ -6,6 +6,8 @@ allowed-tools: Bash(python ${CLAUDE_PLUGIN_ROOT}/scripts/stack_profile.py *), Ba
 
 # Web Standards
 
+> **Codex and other agents:** `${CLAUDE_PLUGIN_ROOT}` in the commands below is the plugin root, two folders above this SKILL.md (the session-start hook also prints it as "Plugin root"). Claude Code fills it in; elsewhere, substitute the absolute path.
+
 Every **Rule** line in `references/` is a requirement. Findings and advice cite rule IDs such as `sec.16`, meaning section 16 of `08-security.md`. `references/rule-index.md` lists all 179 rules, with how each one is checked.
 
 ## 0. Detect the stack first (always)

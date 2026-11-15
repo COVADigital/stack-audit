@@ -22,8 +22,18 @@ class SessionStartHookTests(unittest.TestCase):
     def test_hooks_json_points_at_existing_script(self):
         cfg = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         cmd = cfg["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-        self.assertIn("${CLAUDE_PLUGIN_ROOT}/hooks/session_start.py", cmd)
+        self.assertIn("'hooks','session_start.py'", cmd)
+        self.assertNotIn("${", cmd)  # no shell expansion: cmd, PowerShell and sh all run it (Codex on Windows)
         self.assertTrue(HOOK.is_file())
+
+    def test_hook_commands_run_with_plugin_root_env(self):
+        cfg = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        cmd = cfg["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding="utf-8",
+                             env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(ROOT)}, timeout=60)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        ctx = json.loads(res.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn(f"Plugin root: {ROOT.as_posix()}", ctx)
 
     def test_script_prints_valid_context_naming_every_skill(self):
         out = subprocess.run([sys.executable, str(HOOK)], capture_output=True, check=True).stdout
@@ -149,7 +159,8 @@ class PostEditHookTests(unittest.TestCase):
         cfg = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         entry = cfg["hooks"]["PostToolUse"][0]
         self.assertEqual(set(entry["matcher"].split("|")), {"Write", "Edit", "MultiEdit"})
-        self.assertIn("${CLAUDE_PLUGIN_ROOT}/hooks/post_edit.py", entry["hooks"][0]["command"])
+        self.assertIn("'hooks','post_edit.py'", entry["hooks"][0]["command"])
+        self.assertNotIn("${", entry["hooks"][0]["command"])
 
     def test_flags_errors_in_the_edited_file_only(self):
         (self.dir / "app").mkdir()
@@ -195,6 +206,30 @@ class PostEditHookTests(unittest.TestCase):
         self.assertEqual(self.run_hook("lib/a.ts", bad, env={"STACK_AUDIT_ON_EDIT": "0"}), "")
         (self.dir / "stack-audit.config.json").write_text('{"hooks": {"onEdit": false}}', encoding="utf-8")
         self.assertEqual(self.run_hook("lib/a.ts", bad), "")
+
+    def test_codex_apply_patch_payload(self):
+        bad = self.dir / "lib" / "a.ts"
+        bad.parent.mkdir(parents=True, exist_ok=True)
+        bad.write_text("export const f = (c) => eval(c);\n", encoding="utf-8")
+        (self.dir / "compose.yaml").write_text("services:\n  db:\n    image: postgres:17\n"
+                                               "    environment: { POSTGRES_PASSWORD: hunter2 }\n", encoding="utf-8")
+        patch = ("*** Begin Patch\n*** Update File: lib/a.ts\n@@\n-x\n+export const f = (c) => eval(c);\n"
+                 "*** Add File: compose.yaml\n+services:\n*** Update File: gone.ts\n*** Move to: README.md\n*** End Patch\n")
+        payload = {"hook_event_name": "PostToolUse", "tool_name": "apply_patch", "cwd": str(self.dir),
+                   "tool_input": {"command": patch}}
+        res = subprocess.run([sys.executable, str(EDIT_HOOK)], input=json.dumps(payload), capture_output=True,
+                             text=True, encoding="utf-8", timeout=60)
+        ctx = json.loads(res.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("sec.01", ctx)
+        self.assertIn("lib/a.ts", ctx)
+        self.assertIn("csec.01", ctx)
+        self.assertNotIn("hunter2", ctx)
+        sys.path.insert(0, str(ROOT / "hooks"))
+        import post_edit
+        self.assertEqual(post_edit.edited_paths({"tool_input": {"command": "ls -la"}}), [])
+        self.assertEqual(post_edit.edited_paths({"tool_input": {"file_path": "x.ts"}}), ["x.ts"])
+        many = "*** Begin Patch\n" + "".join(f"*** Add File: f{i}.ts\n" for i in range(9))
+        self.assertEqual(len(post_edit.edited_paths({"tool_input": {"command": many}})), post_edit.MAX_FILES)
 
     def test_bad_payload_never_fails(self):
         res = subprocess.run([sys.executable, str(EDIT_HOOK)], input="not json", capture_output=True, text=True)

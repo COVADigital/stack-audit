@@ -1,4 +1,4 @@
-"""SessionStart hook: tells Claude when to load the stack-audit skills.
+"""SessionStart hook: tells the agent (Claude Code or Codex) when to load the stack-audit skills.
 
 Why: descriptions alone don't get these skills loaded when a question points at one file;
 the model reads the file and answers from memory. This puts the rule in context up front.
@@ -16,7 +16,8 @@ CONTEXT = """The stack-audit plugin is installed. Load the matching skill BEFORE
 - stack-audit:container-standards: reviewing or changing a Dockerfile, a Compose file, a container image, published ports, container secrets, a Docker host or a Coolify server.
 - stack-audit:data-standards: writing or reviewing a Drizzle schema or a database migration (Drizzle Kit, Prisma, SQL), drizzle-kit push vs migrate, database connections, roles, SSL or seed scripts.
 - stack-audit:owasp-security: what OWASP, ASVS or the OWASP Top 10 says, or security advice that needs citations.
-Do not load them for unrelated work."""
+Do not load them for unrelated work.
+Plugin root: {root}. Skill commands write it as ${{CLAUDE_PLUGIN_ROOT}}; if your client does not fill that in (Codex), use this path."""
 
 SETUP = """
 One-time setup is pending for stack-audit:owasp-security: its local copy of the OWASP Cheat Sheet Series is missing. The first time an OWASP, ASVS or Top 10 question comes up, tell the user and offer to run this for them (a download from GitHub into their home folder), and run it only after they agree:
@@ -97,4 +98,5 @@ def asvs_note() -> str:
 
 
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
-                                         "additionalContext": CONTEXT + owasp_note() + asvs_note()}}))
+                                         "additionalContext": CONTEXT.format(root=Path(__file__).resolve().parent.parent.as_posix())
+                                                              + owasp_note() + asvs_note()}}))

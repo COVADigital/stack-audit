@@ -1,12 +1,12 @@
 {
-  "description": "Tells Claude at session start when to load the stack-audit skills, and checks each file Claude edits for error-level security findings",
+  "description": "Tells the agent (Claude Code or Codex) at session start when to load the stack-audit skills, and checks each file it edits for error-level security findings",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/session_start.py\""
+            "command": "python -c \"import os,runpy;runpy.run_path(os.path.join(os.environ['CLAUDE_PLUGIN_ROOT'],'hooks','session_start.py'),run_name='__main__')\""
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/post_edit.py\"",
+            "command": "python -c \"import os,runpy;runpy.run_path(os.path.join(os.environ['CLAUDE_PLUGIN_ROOT'],'hooks','post_edit.py'),run_name='__main__')\"",
             "timeout": 30
           }
         ]

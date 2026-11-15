@@ -8,9 +8,9 @@
 
 # stack-audit
 
-A [Claude Code](https://claude.com/claude-code) plugin with engineering standards and **read-only** audits for React / Next.js apps, Postgres / Drizzle databases, Docker / Compose stacks, and OWASP-backed security guidance.
+A plugin for [Claude Code](https://claude.com/claude-code) and [Codex CLI](https://developers.openai.com/codex) with engineering standards and **read-only** audits for React / Next.js apps, Postgres / Drizzle databases, Docker / Compose stacks, and OWASP-backed security guidance.
 
-It gives Claude four skills, each with written standards, audit scripts that scan a project in seconds, and ready-to-use templates.
+It gives your coding agent four skills, each with written standards, audit scripts that scan a project in seconds, and ready-to-use templates.
 
 | Skill | Covers | Use it for |
 |---|---|---|
@@ -21,7 +21,7 @@ It gives Claude four skills, each with written standards, audit scripts that sca
 
 ## What you can ask
 
-You don't need to name a skill. Ask normally and Claude loads the right one:
+You don't need to name a skill. Ask normally and the agent loads the right one:
 
 ```text
 review src/app/checkout/page.tsx before I open a PR
@@ -43,7 +43,9 @@ Or call a skill directly:
 
 ## Install
 
-Requires Claude Code and Python 3.10 or later, available as `python` on your PATH. The scripts use the standard library only, so there is nothing to `pip install`. git is optional; with it, scans respect `.gitignore` and can check only changed files.
+Requires Claude Code or Codex CLI, and Python 3.10 or later, available as `python` on your PATH. The scripts use the standard library only, so there is nothing to `pip install`. git is optional; with it, scans respect `.gitignore` and can check only changed files.
+
+### Claude Code
 
 From inside Claude Code:
 
@@ -64,7 +66,32 @@ To try it without installing, clone the repository and start Claude Code with:
 claude --plugin-dir path/to/stack-audit
 ```
 
-### Permissions
+### Codex CLI
+
+From a terminal:
+
+```sh
+codex plugin marketplace add COVADigital/stack-audit
+codex plugin add stack-audit@stack-audit
+```
+
+Codex installs the same skills, scripts and hooks. Two differences:
+
+- **Hooks need your approval once.** Codex skips plugin hooks until you review and trust them, so the first session asks you to trust stack-audit's start-up and edit hooks. Until you do, the skills still work, but Codex isn't told when to load them and edited files aren't checked.
+- **No pre-approved scripts.** Codex runs the audit scripts under its own sandbox and approval settings. They only read files, so the default sandbox allows them. Flags that use the network (`--url`, `--audit`, `--remote`, `--image`) need your approval.
+
+Update with `codex plugin marketplace upgrade stack-audit`, then start a new session.
+
+| Feature | Claude Code | Codex CLI |
+|---|---|---|
+| Skills, rules, audit scripts, templates | yes | yes |
+| Start-up hook (which skill to load) | yes | yes, after you trust it |
+| Edit hook (checks each edited file) | yes (`Write`/`Edit`) | yes (`apply_patch`), after you trust it |
+| Multiple-choice questions | AskUserQuestion | numbered questions in chat |
+| Coolify add-on MCP server | yes | yes |
+| Evals (`claude plugin eval`) | yes | no |
+
+### Permissions (Claude Code)
 
 In Claude Code's default permission mode, loading a skill needs your approval, so the first time a skill applies Claude asks before using it. The audit scripts inside each skill are pre-approved and then run without further prompts. To approve the four skills up front, add this to `~/.claude/settings.json` (or a project's `.claude/settings.json`):
 
@@ -85,7 +112,7 @@ With `claude -p` (scripts, CI), nothing can prompt you, so pass the same rules w
 
 ### One-time setup for `owasp-security`
 
-The OWASP skill reads a local clone of the cheat sheets. Nothing is downloaded when you install the plugin. The first time you ask an OWASP question without the clone, Claude tells you it's missing and offers to run the command below; it runs only if you agree. You can also clone it yourself beforehand:
+The OWASP skill reads a local clone of the cheat sheets. Nothing is downloaded when you install the plugin. The first time you ask an OWASP question without the clone, the agent tells you it's missing and offers to run the command below; it runs only if you agree. You can also clone it yourself beforehand:
 
 ```sh
 git clone https://github.com/OWASP/CheatSheetSeries.git ~/.claude/data/owasp-cheatsheets
@@ -95,7 +122,7 @@ To keep it somewhere else, set `STACK_AUDIT_OWASP_CHEATSHEETS` to the path.
 
 ### Optional: ASVS requirement text
 
-Without it, ASVS answers work at section level (V3.3 Cookie Setup). With it, Claude can quote individual requirements (V3.3.1) with their level and a link. The text is OWASP's ASVS 5.0.0 release file (163 KB, CC BY-SA 4.0), downloaded separately and never bundled with the plugin. Claude offers the command the first time ASVS comes up and runs it only if you agree. To do it yourself:
+Without it, ASVS answers work at section level (V3.3 Cookie Setup). With it, the agent can quote individual requirements (V3.3.1) with their level and a link. The text is OWASP's ASVS 5.0.0 release file (163 KB, CC BY-SA 4.0), downloaded separately and never bundled with the plugin. The agent offers the command the first time ASVS comes up and runs it only if you agree. To do it yourself:
 
 ```sh
 curl -fsSL --create-dirs -o ~/.claude/data/owasp-asvs/asvs-5.0.0.flat.json \
@@ -107,7 +134,7 @@ The plugin refuses a file that doesn't match the pinned hash. To keep it elsewhe
 
 ### Keeping the cheat sheets current
 
-At the start of each session the plugin checks how long ago the clone was last updated. This is a local file check with no network access. If it has been more than 30 days, Claude tells you the next time an OWASP question comes up and offers to update it; it runs `git pull` only if you agree. The copy keeps working if you decline.
+At the start of each session the plugin checks how long ago the clone was last updated. This is a local file check with no network access. If it has been more than 30 days, the agent tells you the next time an OWASP question comes up and offers to update it; it runs `git pull` only if you agree. The copy keeps working if you decline.
 
 To update without being asked, turn on automatic updates. The plugin then pulls at session start, at most once every 30 days. It is off by default because it uses the network without asking first. Either set an environment variable:
 
@@ -127,23 +154,23 @@ You can always update by hand with `git -C ~/.claude/data/owasp-cheatsheets pull
 
 If you deploy with [Coolify](https://coolify.io), the plugin can also check the live server: public databases, database backups, pending OS updates, image vulnerability scans, secrets passed to builds, and server access settings. Everyone else can ignore this; the Compose checks work without it.
 
-The first time Coolify comes up, Claude asks once whether you want the add-on and remembers the answer in `~/.claude/data/stack-audit/addons.json`. If you say yes:
+The first time Coolify comes up, the agent asks once whether you want the add-on and remembers the answer in `~/.claude/data/stack-audit/addons.json`. If you say yes:
 
-1. Claude checks whether Claude Code and Codex CLI already have a `coolify` MCP server. Where one is missing, it asks which clients to set up and for your Coolify URL, then adds the server (`coolify_addon.py install --url https://your-coolify-host --client claude|codex|both`). Both configs read the token from the `COOLIFY_TOKEN` environment variable (Claude Code: header `Bearer ${COOLIFY_TOKEN}`; Codex: `--bearer-token-env-var`), so the token is never written into either config.
+1. The agent checks whether Claude Code and Codex CLI already have a `coolify` MCP server. Where one is missing, it asks which clients to set up and for your Coolify URL, then adds the server (`coolify_addon.py install --url https://your-coolify-host --client claude|codex|both`). Both configs read the token from the `COOLIFY_TOKEN` environment variable (Claude Code: header `Bearer ${COOLIFY_TOKEN}`; Codex: `--bearer-token-env-var`), so the token is never written into either config.
 2. In Coolify, create an API token (**Keys & Tokens → API tokens**) with only the **read** permission. Add **read:sensitive** only if you want docker run options checked. Never give it write, deploy or root.
-3. Store the token with `python skills/container-standards/scripts/coolify_addon.py set-token`. Run it in your own terminal so the token goes into a hidden prompt and never into the chat (recommended), or paste it to Claude, which passes it on stdin. It is saved as a user environment variable (Windows: your user environment; macOS/Linux: `~/.config/stack-audit/coolify.env`, mode 0600, sourced from your shell profile), and the connection is checked.
+3. Store the token with `python skills/container-standards/scripts/coolify_addon.py set-token`. Run it in your own terminal so the token goes into a hidden prompt and never into the chat (recommended), or paste it to the agent, which passes it on stdin. It is saved as a user environment variable (Windows: your user environment; macOS/Linux: `~/.config/stack-audit/coolify.env`, mode 0600, sourced from your shell profile), and the connection is checked.
 4. Restart Claude Code and Codex from a new terminal.
 
-The checks are strictly read-only. Claude asks which Coolify projects to audit, reads them with the connector's read tools only (never start, stop, deploy or change), reads environment variable names but never values, and saves the snapshot to a temporary folder outside your repository. To change your answer later, run `python skills/container-standards/scripts/coolify_addon.py set yes` (or `no`).
+The checks are strictly read-only. The agent asks which Coolify projects to audit, reads them with the connector's read tools only (never start, stop, deploy or change), reads environment variable names but never values, and saves the snapshot to a temporary folder outside your repository. To change your answer later, run `python skills/container-standards/scripts/coolify_addon.py set yes` (or `no`).
 
 ## How it works
 
-- **A start-up hook** tells Claude when to load each skill, so a question like "review this file" uses the standards instead of an answer from memory.
-- **An edit hook** checks each file Claude writes or edits (TypeScript/JavaScript, Drizzle schemas, SQL migrations, Dockerfiles, Compose files) for error-level findings, such as XSS sinks, hard-coded secrets, raw SQL, a migration that would fail on a table with rows, or a privileged container. It tells Claude straight away so the fix happens while the file is open. It runs offline in well under a second and says nothing when the file is clean. Turn it off with `STACK_AUDIT_ON_EDIT=0` or `{ "hooks": { "onEdit": false } }` in `stack-audit.config.json`.
-- **Each skill is a `SKILL.md`** with reference files Claude reads only when it needs them. Findings cite rule IDs such as `sec.16`, which map to a section in the references.
+- **A start-up hook** tells the agent when to load each skill, so a question like "review this file" uses the standards instead of an answer from memory.
+- **An edit hook** checks each file the agent writes or edits (TypeScript/JavaScript, Drizzle schemas, SQL migrations, Dockerfiles, Compose files) for error-level findings, such as XSS sinks, hard-coded secrets, raw SQL, a migration that would fail on a table with rows, or a privileged container. It tells the agent straight away so the fix happens while the file is open. It runs offline in well under a second and says nothing when the file is clean. Turn it off with `STACK_AUDIT_ON_EDIT=0` or `{ "hooks": { "onEdit": false } }` in `stack-audit.config.json`.
+- **Each skill is a `SKILL.md`** with reference files the agent reads only when it needs them. Findings cite rule IDs such as `sec.16`, which map to a section in the references.
 - **Audit scripts** do the mechanical scanning and report `file:line` findings with a severity, a fix hint and the rule ID.
-- **Missing scanners are offered, never installed silently.** Some checks use outside tools (hadolint, trivy, grype, gitleaks). If one isn't installed, Claude asks whether to run it once from its official container image, install it system-wide, or skip that check.
-- **Checks worth repeating can be saved.** When Claude runs a check of its own that you're likely to need again, it asks whether to keep it one-off, save it as a test in your project's existing test suite, or save it as a standalone script. Nothing is saved without your say-so.
+- **Missing scanners are offered, never installed silently.** Some checks use outside tools (hadolint, trivy, grype, gitleaks). If one isn't installed, the agent asks whether to run it once from its official container image, install it system-wide, or skip that check.
+- **Checks worth repeating can be saved.** When the agent runs a check of its own that you're likely to need again, it asks whether to keep it one-off, save it as a test in your project's existing test suite, or save it as a standalone script. Nothing is saved without your say-so.
 - **`owasp-security` quotes from the local clone**, by sheet and section with a link, and has a checker that verifies every citation exists. ASVS results are always labelled as a self-assessment, never as compliance or certification.
 
 ### Safety
@@ -153,9 +180,9 @@ The checks are strictly read-only. Claude asks which Coolify projects to audit, 
 - The start-up hook only reads local files, unless you have turned on automatic cheat sheet updates. The edit hook only reads the file that was edited and the project's config.
 - The Compose audit never reads env files or secret files, and never prints secret values.
 - The Coolify audit reads only a snapshot file, refuses one that contains secret-shaped fields, and never prints commands or docker run options.
-- Claude asks before running anything that contacts an external service.
+- The agent asks before running anything that contacts an external service.
 
-## Use the audits without Claude
+## Use the audits without an agent
 
 The scripts are plain command-line tools. They work in a terminal or CI, with no API usage:
 
@@ -204,7 +231,7 @@ Per path, in `stack-audit.config.json` at the project root:
 
 ## Templates
 
-Each skill ships starting points Claude can adapt, in `skills/<name>/assets/`:
+Each skill ships starting points the agent can adapt, in `skills/<name>/assets/`:
 
 - **web-standards:** security headers for `next.config.ts`, a CSP proxy with nonces, `.gitignore`, Dependabot, pre-commit secret scanning, Lighthouse CI, an axe accessibility test, an ADR template, and a GitHub Actions workflow that runs the web, database and container audits on every PR and shows the findings in code scanning (`ci-stack-audit.yml`).
 - **container-standards:** Dockerfiles for Next.js standalone and for a Node service, a hardened Compose file, `.dockerignore`, `daemon.json` with log rotation, a CI image-scan workflow.

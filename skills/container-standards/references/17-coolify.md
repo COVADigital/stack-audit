@@ -101,6 +101,8 @@ Not everyone runs Coolify, so the live checks are an opt-in add-on. The static r
 
 ### Opt in once
 
+Where a step says AskUserQuestion: in Claude Code use that tool; in Codex and other clients ask the same question in chat as a numbered list (several numbers for a multi-select) and wait for the answer.
+
 1. When Coolify comes up (the user mentions it, a Compose file uses `SERVICE_FQDN_*` / `SERVICE_PASSWORD_*`, or `audit_compose.py` reports `coolify_files`), run `scripts/coolify_addon.py status`. It returns the saved `choice`, whether `COOLIFY_TOKEN` is set, and for `claude` and `codex` whether the CLI exists (`cli`) and already has an MCP server named `coolify` (`server`).
 2. If `choice` is `null`, ask the user with AskUserQuestion (Yes / No): *"Add the stack-audit Coolify add-on? It connects your Coolify server's MCP endpoint to Claude Code (and Codex CLI if you use it) with a read-only API token, so audits can check the live server: public databases, backups, pending updates, image scans and app settings."* Save the answer with `coolify_addon.py set yes|no`. After "no", don't ask again. The user can say "turn on the Coolify add-on" later.
 3. If `choice` is `yes` and a CLI that exists has `server: false` (and no Coolify MCP tools are loaded in this session), set it up:

@@ -1,0 +1,28 @@
+{
+  "name": "stack-audit",
+  "version": "0.6.0",
+  "description": "Engineering standards and read-only audits for React/Next.js apps, Postgres/Drizzle databases, Docker/Compose stacks, and OWASP-backed security and ASVS self-assessment.",
+  "author": { "name": "Joseph Bain" },
+  "homepage": "https://github.com/COVADigital/stack-audit",
+  "repository": "https://github.com/COVADigital/stack-audit",
+  "license": "MIT",
+  "keywords": ["nextjs", "react", "docker", "postgres", "drizzle", "owasp", "asvs", "security", "accessibility", "audit"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Stack Audit",
+    "shortDescription": "Standards and read-only audits for Next.js, Postgres, Docker and OWASP",
+    "longDescription": "Four skills with citable rules and read-only audit scripts: web-standards (React/Next.js), data-standards (Postgres/Drizzle schemas and migrations), container-standards (Dockerfiles, Compose, Docker hosts, optional Coolify live checks) and owasp-security (OWASP cheat sheets and ASVS 5.0). Findings cite rule IDs with file:line and a fix.",
+    "developerName": "Joseph Bain",
+    "category": "Productivity",
+    "capabilities": ["Instructions", "Lifecycle hooks"],
+    "websiteURL": "https://github.com/COVADigital/stack-audit",
+    "defaultPrompt": [
+      "Audit this repo before launch: security, accessibility and the Docker setup.",
+      "Is this migration safe to run on production?",
+      "What does OWASP recommend for password reset flows? Cite the cheat sheet section."
+    ],
+    "composerIcon": "./assets/stack-audit-icon-transparent-128x128.png",
+    "logo": "./assets/stack-audit-plugin-icon.png"
+  }
+}

@@ -33,11 +33,11 @@ In scope, for example:
 - Network access without the explicit flag or setting that is supposed to enable it.
 - A script reading or printing secret values (env files, secret files, tokens).
 - A crafted file in a scanned project that makes a script execute code or read files outside that project.
-- Instructions in a skill that lead Claude to take a harmful action.
+- Instructions in a skill that lead the agent (Claude Code or Codex) to take a harmful action.
 
 Out of scope:
 
 - Vulnerabilities in a project you scanned with stack-audit. Report those to that project.
-- Vulnerabilities in third-party tools the plugin can call (npm, trivy, grype, hadolint, gitleaks) or in Claude Code itself. Report those to their maintainers.
+- Vulnerabilities in third-party tools the plugin can call (npm, trivy, grype, hadolint, gitleaks) or in Claude Code or Codex themselves. Report those to their maintainers.
 - Errors in the OWASP Cheat Sheet Series. Report those to [OWASP](https://github.com/OWASP/CheatSheetSeries).
 - A missed finding or a false positive in an audit rule. That is a bug, not a vulnerability: please open a normal issue.

@@ -6,6 +6,8 @@ allowed-tools: Bash(python ${CLAUDE_PLUGIN_ROOT}/skills/owasp-security/scripts/*
 
 # OWASP Security
 
+> **Codex and other agents:** `${CLAUDE_PLUGIN_ROOT}` in the commands below is the plugin root, two folders above this SKILL.md (the session-start hook also prints it as "Plugin root"). Claude Code fills it in; elsewhere, substitute the absolute path.
+
 This skill works from a **local clone** of the OWASP Cheat Sheet Series (139 sheets, CC BY-SA 4.0) through a generated catalog of headings, anchors and the official index mappings, plus (optionally) OWASP's ASVS 5.0 release file for requirement text. The scripts only read files. They never pull, clone or reach the network.
 
 Run each script as **one command with this full path** (no `S=` variable, `cd`, `&&` or pipes), so it matches the skill's pre-approved commands and runs without a permission prompt. Always add `--data-dir ${CLAUDE_PLUGIN_DATA}`. If the clone isn't in the default location (`~/.claude/data/owasp-cheatsheets`), also add `--clone <path>`.

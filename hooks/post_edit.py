@@ -1,7 +1,8 @@
-"""PostToolUse hook: checks each file Claude writes or edits for error-level security findings.
+"""PostToolUse hook: checks each file the agent writes or edits for error-level security findings.
 
-Why: review-time audits find problems after the code is written; this tells Claude while the
-file is still in front of it. Read-only, offline, and silent when the file is clean.
+Why: review-time audits find problems after the code is written; this tells the agent while the
+file is still in front of it. Claude Code sends `tool_input.file_path`; Codex sends an `apply_patch`
+patch in `tool_input.command`, so the file names are read from its `*** Add/Update File:` lines. Read-only, offline, and silent when the file is clean.
 Off with STACK_AUDIT_ON_EDIT=0 or { "hooks": { "onEdit": false } } in stack-audit.config.json.
 """
 import json
@@ -17,6 +18,8 @@ CONTAINERS = PLUGIN / "skills" / "container-standards" / "scripts"
 DATA = PLUGIN / "skills" / "data-standards" / "scripts"
 TIMEOUT_S = 20
 MAX_FINDINGS = 8
+MAX_FILES = 5  # a large Codex patch gets a full audit, not a slow hook
+PATCH_FILE = re.compile(r"^\*\*\* (?:Add File|Update File|Move to): (.+?)\s*$", re.M)
 
 
 def scripts_for(file: Path) -> list[Path]:
@@ -58,17 +61,38 @@ def enabled(root: Path) -> bool:
         return True
 
 
-def findings_for(payload: dict) -> tuple[str, list[dict]]:
-    path = (payload.get("tool_input") or {}).get("file_path")
-    if not path:
-        return "", []
+def edited_paths(payload: dict) -> list[str]:
+    """Files an edit touched: Claude Code's `file_path`, or the files named in a Codex `apply_patch`."""
+    ti = payload.get("tool_input") or {}
+    if not isinstance(ti, dict):
+        return []
+    if ti.get("file_path"):
+        return [str(ti["file_path"])]
+    cmd = ti.get("command")
+    if isinstance(cmd, list):
+        cmd = "\n".join(map(str, cmd))
+    if not isinstance(cmd, str) or "*** Begin Patch" not in cmd:
+        return []
+    return list(dict.fromkeys(m.strip() for m in PATCH_FILE.findall(cmd)))[:MAX_FILES]
+
+
+def findings_for(payload: dict) -> list[tuple[str, list[dict]]]:
+    cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
+    results = []
+    for path in edited_paths(payload):
+        rel, found = check_file(cwd / path, cwd)  # an absolute path replaces cwd
+        if found:
+            results.append((rel, found))
+    return results
+
+
+def check_file(path: Path, cwd: Path) -> tuple[str, list[dict]]:
     file = Path(path).resolve()
     if not file.is_file():
         return "", []
     scripts = scripts_for(file)
     if not scripts:
         return "", []
-    cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
     root = project_root(file, cwd)
     if not enabled(root):
         return "", []
@@ -100,11 +124,12 @@ def message(rel: str, found: list[dict]) -> str:
 
 def main() -> None:
     try:  # a broken hook must never block an edit
-        rel, found = findings_for(json.load(sys.stdin))
+        results = findings_for(json.load(sys.stdin))
     except Exception:
         return
-    if found:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": message(rel, found)}}))
+    if results:
+        text = "\n\n".join(message(rel, found) for rel, found in results)
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}))
 
 
 if __name__ == "__main__":

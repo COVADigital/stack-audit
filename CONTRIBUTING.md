@@ -36,7 +36,7 @@ The `owasp-security` tests and scripts need a local clone of the OWASP Cheat She
 These are what make the plugin safe to run on someone else's project, so pull requests that break them won't be merged:
 
 - **Read-only.** Audit scripts never modify the project they scan and never install anything.
-- **No network by default.** Anything that contacts a service must sit behind an explicit flag or setting, and the skill must tell Claude to ask first.
+- **No network by default.** Anything that contacts a service must sit behind an explicit flag or setting, and the skill must tell the agent to ask first.
 - **No secret values.** Never read env or secret files, and never print a secret value. Report names only.
 - **Standard library only.** No third-party Python packages.
 - **Your own words.** Don't copy text from the OWASP Cheat Sheet Series (CC BY-SA 4.0) or other sources into the skills. Describe the rule yourself and cite the sheet.
