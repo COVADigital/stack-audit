@@ -90,7 +90,7 @@ Update with `codex plugin marketplace upgrade stack-audit`, then start a new ses
 | Edit hook (checks each edited file) | yes (`Write`/`Edit`) | yes (`apply_patch`), after you trust it |
 | Multiple-choice questions | AskUserQuestion | numbered questions in chat |
 | Coolify add-on MCP server | yes | yes |
-| Evals (`claude plugin eval`) | yes | no |
+| Evals (`claude plugin eval`, for contributors; on Windows run them in WSL, see [CONTRIBUTING](CONTRIBUTING.md#running-evals)) | yes | no |
 
 ### Permissions (Claude Code)
 

@@ -31,6 +31,49 @@ claude plugin validate path/to/stack-audit
 
 The `owasp-security` tests and scripts need a local clone of the OWASP Cheat Sheet Series. See "One-time setup" in the [README](README.md).
 
+## Running evals
+
+Each skill keeps its eval cases in `skills/<skill>/evals/<case>/`: a `prompt.md`, `graders/*.md`, a `case.yaml` and the fixture files. `claude plugin eval` runs them on your own account, so **every run is billed**. Start with one case and one run, and set a cost cap.
+
+`claude plugin eval` won't read eval cases inside `skills/`, so run them from a copy with the case moved to a top-level `evals/` folder:
+
+```sh
+mkdir -p /tmp/stack-audit-eval/evals
+git archive HEAD | tar -x -C /tmp/stack-audit-eval
+mv /tmp/stack-audit-eval/skills/data-standards/evals/postgres-hardening /tmp/stack-audit-eval/evals/
+cd /tmp/stack-audit-eval
+claude plugin eval . --case postgres-hardening --scaffold --allow-tools "Bash(python:*)" \
+  --runs 1 --ablation none --max-cost-usd 5 --no-publish --output-dir ~/eval-out
+```
+
+`--scaffold` copies the case's fixture files into the run's workspace. `--allow-tools "Bash(python:*)"` lets the agent run the audit scripts, as it would in a real session.
+
+### Windows: use WSL
+
+On Windows, `claude plugin eval` refuses to give the agent a shell, because Claude Code has no shell sandbox on Windows yet. Without the shell grant, the agent can only read files, so the audit scripts never run. To test the full flow, run evals in WSL 2 (Ubuntu):
+
+1. Open an Ubuntu terminal (`wsl` from PowerShell, or **Ubuntu (WSL)** in the VS Code terminal list).
+2. Install the sandbox tools, and a `python` command for the skills' scripts:
+   ```sh
+   sudo apt update && sudo apt install -y bubblewrap socat python-is-python3
+   ```
+3. Install Claude Code inside Ubuntu, log in once (`/login`, then `/exit`), and check that it works:
+   ```sh
+   curl -fsSL https://claude.ai/install.sh | bash
+   exec bash
+   claude
+   claude -p "say ok"
+   ```
+4. Check the sandbox: `bwrap --ro-bind / / true && echo "sandbox OK"`.
+5. Work from the Linux filesystem (`~`), not `/mnt/c`, and run the commands above.
+
+The eval also checks for places where credentials could leak into the sandbox, and refuses to run if it finds any. Two of these checks fail on a typical WSL machine:
+
+- **`a PATH directory could not be examined`**: WSL adds the Windows `PATH` (`/mnt/c/...`). Run the eval with a Linux-only `PATH`: `env PATH="$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" claude plugin eval ...`
+- **`the Docker ... credential store ... holds a symbolic link`**: Docker Desktop's WSL integration puts links in `~/.docker/contexts`, and setting `DOCKER_CONFIG` doesn't help. Move the folder aside for the run, and put it back straight after: `mv ~/.docker ~/.docker.bak`, run the eval, then `mv ~/.docker.bak ~/.docker`.
+
+A failed run leaves a read-only folder under `/tmp/claude-eval-*`. Remove it with `chmod -R u+rwx /tmp/claude-eval-XXXX && rm -rf /tmp/claude-eval-XXXX`.
+
 ## Ground rules for changes
 
 These are what make the plugin safe to run on someone else's project, so pull requests that break them won't be merged:

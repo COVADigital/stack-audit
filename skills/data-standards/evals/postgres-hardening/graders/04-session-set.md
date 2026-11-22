@@ -1,6 +1,5 @@
 ---
 type: llm
-focus: output
 weight: 1
 ---
 

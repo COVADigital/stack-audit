@@ -434,6 +434,7 @@ Each step is safe to stop after. Take a backup before each step (`dbo.07`), and 
 
 | Step | Change | Check before moving on | Rollback |
 |---|---|---|---|
+| 0. Contain (only if exposed) | `trust` from a non-local address in `pg_hba.conf`, or 5432 reachable from the internet: replace the line with `scram-sha-256` or `reject`, close the port at the firewall, `SELECT pg_reload_conf()`, then rotate passwords. Do this now, before patching | Logs show which clients used that line; `pg_hba_file_rules` has no errors; a connection from outside is refused | Restore the previous `pg_hba.conf` and reload |
 | 1. Patch | New minor version (image tag or packages) for the server and client tools, then restart | `SELECT version()`; app health checks | Previous image tag (minor releases are binary-compatible) |
 | 2. Observe | `log_connections`, `log_disconnections`, `log_statement = 'ddl'`, `log_line_prefix`, `log_min_duration_statement`, `ssl = on` (`pg_reload_conf()`; `ssl` needs only a reload) | Snapshot again: which roles, from where, with or without TLS | Reset the settings and reload |
 | 3. Roles (staging first) | Create the migration and app roles, move ownership, revoke `PUBLIC`/`TEMPORARY`, column grants, app-role timeouts and connection limit; run the full test suite | No permission errors in tests or logs; migrations still run as the owner | `GRANT` back the revoked privileges; `ALTER ROLE … RESET statement_timeout` |
