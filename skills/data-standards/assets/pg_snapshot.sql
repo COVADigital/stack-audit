@@ -43,7 +43,7 @@ SELECT jsonb_build_object('section', 'settings', 'rows', coalesce(jsonb_agg(t), 
                  'log_line_prefix', 'shared_preload_libraries', 'statement_timeout', 'lock_timeout',
                  'idle_in_transaction_session_timeout', 'row_security', 'data_directory_mode',
                  'log_parameter_max_length', 'log_parameter_max_length_on_error',
-                 'standard_conforming_strings', 'backslash_quote')
+                 'standard_conforming_strings', 'backslash_quote', 'lo_compat_privileges', 'pgaudit.log')
 ) t;
 
 SELECT jsonb_build_object('section', 'databases', 'rows', coalesce(jsonb_agg(t), '[]'::jsonb)) FROM (
@@ -82,12 +82,44 @@ SELECT jsonb_build_object('section', 'roles', 'rows', coalesce(jsonb_agg(t), '[]
   FROM pg_roles r WHERE r.rolname !~ '^pg_'
 ) t;
 
--- Members of predefined roles that read/write server files or run programs (pg_read_file, COPY ... PROGRAM): dbh.08.
+-- Every role membership of non-predefined roles (names only). The audit follows them transitively: an app role that is a
+-- member of the table owner or a superuser can SET ROLE to it (dbh.06), and inherits TEMP/CREATE and predefined roles
+-- such as pg_read_server_files (dbh.02, dbh.08). DISTINCT: PostgreSQL 16+ keeps one row per grantor. A 16+ grant with
+-- INHERIT, SET and ADMIN all false confers nothing (used for pg_hba group matching); to_jsonb keeps this valid on 15.
 SELECT jsonb_build_object('section', 'memberships', 'rows', coalesce(jsonb_agg(t), '[]'::jsonb)) FROM (
-  SELECT r.rolname AS role, g.rolname AS granted
+  SELECT DISTINCT r.rolname AS role, g.rolname AS granted
   FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.member JOIN pg_roles g ON g.oid = am.roleid
-  WHERE g.rolname IN ('pg_execute_server_program', 'pg_read_server_files', 'pg_write_server_files',
-                      'pg_read_all_data', 'pg_write_all_data', 'pg_signal_backend', 'pg_read_all_stats', 'pg_monitor')
+  WHERE r.rolname !~ '^pg_'
+    AND (am.admin_option OR coalesce((to_jsonb(am) ->> 'inherit_option')::boolean, true)
+         OR coalesce((to_jsonb(am) ->> 'set_option')::boolean, true))
+) t;
+
+-- GRANT SET / ALTER SYSTEM ON PARAMETER (PostgreSQL 15+): ALTER SYSTEM on archive_command or shared_preload_libraries
+-- runs programs as the server's OS user: dbh.06. Empty by default.
+SELECT jsonb_build_object('section', 'parameter_grants', 'rows', coalesce(jsonb_agg(t), '[]'::jsonb)) FROM (
+  SELECT p.parname AS parameter, CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END AS grantee,
+         a.privilege_type AS privilege
+  FROM pg_parameter_acl p CROSS JOIN LATERAL aclexplode(p.paracl) a
+  WHERE NOT EXISTS (SELECT 1 FROM pg_roles r WHERE r.oid = a.grantee AND (r.rolsuper OR r.rolname ~ '^pg_'))
+) t;
+
+-- EXECUTE on server file / large-object / admin functions granted beyond their owner (default: superuser only): dbh.08.
+SELECT jsonb_build_object('section', 'function_grants', 'rows', coalesce(jsonb_agg(DISTINCT t), '[]'::jsonb)) FROM (
+  SELECT p.proname AS name, CASE WHEN g.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(g.grantee) END AS grantee
+  FROM pg_proc p CROSS JOIN LATERAL aclexplode(p.proacl) g
+  WHERE p.pronamespace = 'pg_catalog'::regnamespace AND p.proacl IS NOT NULL AND g.privilege_type = 'EXECUTE'
+    AND p.proname IN ('pg_read_file', 'pg_read_binary_file', 'pg_ls_dir', 'pg_stat_file', 'lo_import', 'lo_export',
+                      'pg_promote', 'pg_reload_conf', 'pg_rotate_logfile')
+    AND g.grantee <> p.proowner
+    AND NOT EXISTS (SELECT 1 FROM pg_roles r WHERE r.oid = g.grantee AND (r.rolsuper OR r.rolname ~ '^pg_'))
+) t;
+
+-- ALTER DEFAULT PRIVILEGES entries: what future tables, sequences, functions and schemas grant automatically: dbh.07.
+SELECT jsonb_build_object('section', 'default_acls', 'rows', coalesce(jsonb_agg(t), '[]'::jsonb)) FROM (
+  SELECT pg_get_userbyid(d.defaclrole) AS role, coalesce(n.nspname, '*') AS schema, d.defaclobjtype::text AS objtype,
+         CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END AS grantee, a.privilege_type AS privilege
+  FROM pg_default_acl d LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace
+  CROSS JOIN LATERAL aclexplode(d.defaclacl) a
 ) t;
 
 SELECT jsonb_build_object('section', 'db_role_settings', 'rows', coalesce(jsonb_agg(t), '[]'::jsonb)) FROM (
@@ -124,7 +156,8 @@ SELECT jsonb_build_object('section', 'languages', 'rows', coalesce(jsonb_agg(t),
 ) t;
 
 -- Tables, views and materialized views: RLS flags, column names (no data), table-level grants, and for views the
--- tables they read.
+-- tables they read. Tables that belong to an extension (PostGIS spatial_ref_sys) are left out: the extension sets
+-- their owner and grants.
 SELECT jsonb_build_object('section', 'relations', 'rows', coalesce(jsonb_agg(t), '[]'::jsonb)) FROM (
   SELECT n.nspname AS schema, c.relname AS name, c.relkind::text AS kind, pg_get_userbyid(c.relowner) AS owner,
          c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls, c.reloptions,
@@ -144,6 +177,7 @@ SELECT jsonb_build_object('section', 'relations', 'rows', coalesce(jsonb_agg(t),
              WHERE rw.ev_class = c.oid) END AS reads
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE c.relkind IN ('r', 'p', 'v', 'm') AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+    AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e')
 ) t;
 
 SELECT jsonb_build_object('section', 'policies', 'rows', coalesce(jsonb_agg(t), '[]'::jsonb)) FROM (

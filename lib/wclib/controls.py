@@ -153,10 +153,10 @@ REQUIREMENT_EVIDENCE: list[tuple[str, str | None, tuple[str, ...]]] = [
     ("dbh.01", None, ("V15.2.1",)),  # server or client tools behind the patched minor release
     ("dbh.04", r"`trust`", ("V13.2.1",)),
     ("dbh.05", r"ssl is off|not encrypted|unencrypted", ("V12.3.1",)),
-    ("dbh.06", r"App role|Superuser", ("V13.2.2",)),
+    ("dbh.06", r"App role|Superuser|superuser `|on parameter", ("V13.2.2",)),
     ("dbh.09", None, ("V8.2.3",)),
     ("dbh.10", r"does nothing|isn't forced", ("V8.4.1",)),
-    ("dbh.11", r"no WITH CHECK|allows every row", ("V8.4.1",)),
+    ("dbh.11", r"no WITH CHECK|allows every row|WITH CHECK \(true\)", ("V8.4.1",)),
     ("dbh.12", None, ("V8.4.1",)),
     ("dbh.13", None, ("V8.4.1",)),
     ("dbh.16", r"MD5", ("V11.4.2",)),

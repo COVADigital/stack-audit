@@ -123,7 +123,7 @@ def bad() -> dict:
         {"schema": "public", "name": "events", "policy": "members", "permissive": "PERMISSIVE", "roles": ["app_user"], "cmd": "ALL",
          "qual": "(tenant_id IN ( SELECT m.tenant_id FROM memberships m WHERE (m.user_id = (SELECT current_setting('app.uid'::text, true) AS current_setting))::uuid))",
          "with_check": None},
-        {"schema": "public", "name": "users", "policy": "by_name", "permissive": "RESTRICTIVE", "roles": ["app_user"], "cmd": "SELECT",
+        {"schema": "public", "name": "users", "policy": "by_name", "permissive": "RESTRICTIVE", "roles": ["app_user"], "cmd": "DELETE",
          "qual": "(email ~~* (SELECT current_setting('app.domain'::text, true) AS current_setting))", "with_check": None},
     ]
     s["definer_functions"] = [{"schema": "public", "name": "grant_admin", "owner": "postgres", "config": None, "public_execute": True}]
@@ -141,6 +141,24 @@ def bad() -> dict:
     s["relations"][2]["grants"].append({"grantee": "app_user", "privilege": "UPDATE", "grantable": True})
     s["cascades"] = [{"schema": "public", "name": "audit", "constraint_name": "audit_user_fk", "ref_table": "public.users",
                       "on_delete": "c", "on_update": "a"}]
+    # Inherited rights: app_user -> db_owner (owns tables) -> pg_write_all_data
+    s["memberships"] += [{"role": "app_user", "granted": "db_owner"}, {"role": "db_owner", "granted": "pg_write_all_data"}]
+    s["databases"] += [{"database": "app", "grantee": "PUBLIC", "privilege": "CONNECT"},
+                       {"database": "crm", "grantee": "PUBLIC", "privilege": "CONNECT"},
+                       {"database": "app", "grantee": "db_owner", "privilege": "CREATE"}]
+    s["function_grants"] = [{"name": "pg_read_file", "grantee": "PUBLIC"}, {"name": "lo_export", "grantee": "reporting"}]
+    s["default_acls"] = [{"role": "db_owner", "schema": "public", "objtype": "r", "grantee": "PUBLIC", "privilege": "SELECT"},
+                         {"role": "db_owner", "schema": "*", "objtype": "f", "grantee": "PUBLIC", "privilege": "EXECUTE"}]
+    s["settings"].append({"name": "lo_compat_privileges", "setting": "on", "source": "configuration file"})
+    s["policies"].append({"schema": "public", "name": "projects", "policy": "move", "permissive": "PERMISSIVE", "roles": ["app_user"],
+                          "cmd": "UPDATE", "qual": "(tenant_id = (SELECT current_setting('app.tenant_id'::text, true) AS current_setting))::uuid",
+                          "with_check": "true"})
+    s["definer_functions"].append({"schema": "public", "name": "lookup2", "owner": "db_owner", "config": ["search_path=public, pg_temp"],
+                                   "public_execute": False})
+    s["relations"].append(rel("legacy_notes", ["id", "body", "passport_number"], owner="postgres"))
+    s["parameter_grants"] = [{"parameter": "archive_command", "grantee": "ops", "privilege": "ALTER SYSTEM"},
+                             {"parameter": "log_statement", "grantee": "reporting", "privilege": "SET"}]
+    s["schemas"].append({"schema": "app", "owner": "postgres", "grantee": "db_owner", "privilege": "CREATE"})
     return s
 
 
@@ -194,8 +212,66 @@ class PostgresLiveTests(TempRepo):
                      "superuser `postgres` can log in over the network", "App role `app_user` can create objects in schema `public`",
                      "Login role `dev_alice` has CREATEROLE, CREATEDB", "App role can re-grant UPDATE on `public.invoices`",
                      "Publication `everything` is FOR ALL TABLES", "subscription `from_legacy`", "Procedural language `plperl` is installed",
-                     "Extension `pg_trgm` is attack surface", "Extension `dblink` is attack surface"):
+                     "Extension `pg_trgm` is attack surface", "Extension `dblink` is attack surface",
+                     "App role `app_user` is a member of `db_owner` (owns 3 table(s))",
+                     "Role `db_owner` (app role `app_user` is a member) is a member of `pg_write_all_data`",
+                     "Role `db_owner` (app role `app_user` is a member) has CREATE on database `app`",
+                     "PUBLIC can connect to database(s) app, crm", "PUBLIC can execute `pg_read_file()`", "Role `reporting` can execute `lo_export()`",
+                     "grant SELECT on future tables in schema `public` to PUBLIC", "lo_compat_privileges is on",
+                     "has WITH CHECK (true)", "`public.lookup2` pins search_path `public, pg_temp` but includes schema public",
+                     "1 table(s) are owned by superuser `postgres`", "passport_number",
+                     "App role `app_user` (through `db_owner`) can create objects in schema `app`"):
             self.assertIn(part, msgs)
+        self.assertNotIn("future functions", msgs)   # PUBLIC EXECUTE on functions is the built-in default
+        self.assertTrue(any("crm not checked" in n for n in data["not_checked"]))
+        sev = {f["message"].split(":")[0]: f["severity"] for f in data["findings"]}
+        self.assertEqual(sev["PUBLIC can execute `pg_read_file()` (server file, large-object or admin function; superuser only by default)"], "error")
+        self.assertEqual(sev["Role `reporting` can execute `lo_export()` (server file, large-object or admin function; superuser only by default)"], "warn")
+        self.assertEqual(sev["Role `ops` has ALTER SYSTEM on parameter `archive_command`"], "error")
+        self.assertEqual(sev["Role `reporting` has SET on parameter `log_statement` (superuser-only by default)"], "warn")
+
+    def test_postgres_maintenance_database_skipped_unless_snapshotted(self):
+        s = clean()
+        s["databases"] += [{"database": "postgres", "grantee": "PUBLIC", "privilege": p} for p in ("CONNECT", "TEMPORARY")]
+        self.assertEqual(self.report(s, "--app-role", "app_user")["findings"], [])
+        s["meta"] = [{**META, "database": "postgres"}]
+        msgs = [f["message"] for f in self.report(s, "--app-role", "app_user")["findings"]]
+        self.assertIn("PUBLIC has TEMPORARY on database `postgres` (it can create temporary objects or schemas)", msgs)
+
+    def test_restrictive_policy_narrows_permissive_true(self):
+        s = clean()
+        tenant = "(tenant_id = (SELECT (current_setting('app.tenant_id'::text, true))::uuid AS current_setting))"
+        s["policies"] = [{"schema": "public", "name": t, "policy": p, "permissive": kind, "roles": ["app_user"], "cmd": "ALL",
+                          "qual": q, "with_check": w}
+                         for t in ("projects", "users")
+                         for p, kind, q, w in (("open", "PERMISSIVE", "true", "true"), ("tenant", "RESTRICTIVE", tenant, None))]
+        self.assertEqual([f["message"] for f in self.report(s, "--app-role", "app_user")["findings"]], [])
+        s["policies"] = [p for p in s["policies"] if not (p["name"] == "users" and p["policy"] == "tenant")]
+        msgs = [f["message"] for f in self.report(s, "--app-role", "app_user")["findings"]]
+        self.assertEqual(msgs, ["Policy `open` on `public.users` allows every row (`true`) for app_user"])
+
+    def test_app_connects_as_bootstrap_superuser(self):
+        data = self.report(clean(), "--app-role", "postgres")
+        hits = [f for f in data["findings"] if f["rule"] == "dbh.06" and "App role `postgres` has SUPERUSER" in f["message"]]
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["severity"], "error")
+        self.assertIn("bootstrap superuser", hits[0]["message"])
+
+    def test_pgaudit_loaded_but_logging_nothing(self):
+        s = clean()
+        s["settings"].append({"name": "pgaudit.log", "setting": "none", "source": "default"})
+        msgs = [f["message"] for f in self.report(s, "--app-role", "app_user")["findings"]]
+        self.assertEqual(msgs, ["pgaudit is loaded but pgaudit.log is `none`: nothing is audited"])
+
+    def test_path_problem(self):
+        pp = audit_postgres.path_problem
+        self.assertIsNone(pp("pg_catalog, pg_temp"))
+        self.assertIsNone(pp('"$user", app, pg_temp'))
+        self.assertIsNone(pp('""'))   # search_path = '' (all names qualified)
+        self.assertIn("doesn't list pg_temp", pp("pg_catalog"))
+        self.assertIn("before other schemas", pp("pg_temp, public"))
+        self.assertIn("includes schema public", pp("public, pg_temp", {"public"}))
+        self.assertEqual(audit_postgres.closure({"a": {"b"}, "b": {"c", "a"}}, "a"), {"a", "b", "c"})
 
     def test_eol_and_inferred_app_role(self):
         s = clean()
@@ -294,6 +370,8 @@ CREATE MATERIALIZED VIEW stats AS SELECT tenant_id, count(*) FROM projects GROUP
 CREATE FUNCTION is_admin() RETURNS boolean LANGUAGE sql SECURITY DEFINER AS $$ SELECT true; $$;
 CREATE FUNCTION pinned() RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$ SELECT true $$;
 REVOKE EXECUTE ON FUNCTION pinned() FROM PUBLIC;
+CREATE FUNCTION weak_path() RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$ SELECT true $$;
+REVOKE EXECUTE ON FUNCTION weak_path() FROM PUBLIC;
 CREATE POLICY open_if_unset ON projects AS RESTRICTIVE USING (tenant_id = (select current_setting('app.tenant_id', true))::uuid OR current_setting('app.tenant_id', true) IS NULL);
 CREATE POLICY distinct_ok ON projects AS RESTRICTIVE USING (tenant_id IS NOT DISTINCT FROM (select current_setting('app.tenant_id', true))::uuid);
 CREATE OR REPLACE FUNCTION fixed_later() RETURNS int LANGUAGE sql SECURITY DEFINER AS $$ SELECT 1 $$;
@@ -329,6 +407,7 @@ DO $$ BEGIN EXECUTE 'ALTER TABLE ' || quote_ident('projects') || ' OWNER TO db_o
         self.assertIn("`is_admin` doesn't pin", text)
         self.assertNotIn("`pinned`", text)
         self.assertNotIn("`fixed_later` doesn't pin", text)
+        self.assertIn(("dbh.14", "warn"), {(r, s) for r, s, m in msgs if "`weak_path` pins search_path `public` but doesn't list pg_temp" in m})
         grants = sorted((s, m.split(" ")[0] + " " + m.split(" ")[1]) for r, s, m in msgs if r == "dbh.07")
         self.assertEqual([s for s, _ in grants], ["info", "warn", "warn", "warn"])        # GRANT EXECUTE; GRANT SELECT; is_admin; fixed_later
         self.assertIn("SECURITY DEFINER function `is_admin` keeps the default EXECUTE for PUBLIC", text)

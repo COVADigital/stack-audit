@@ -5,6 +5,10 @@ expected_outcome: |
   the 2026-11-12 security fixes (upgrade to 16.16+), the app role is a superuser that owns tables, pg_hba has a `trust`
   line open to 0.0.0.0/0, the app sets the tenant with a session-level SET that leaks across pooled connections, and a view
   bypasses RLS. Gives a staged, non-breaking remediation plan (patch and logging first, roles and revokes in staging,
-  hostssl/scram after checking sessions, RLS per table) with rollback steps, and applies nothing.
+  hostssl/scram after checking sessions, RLS per table) with rollback steps, and applies nothing. Also reports the
+  privilege paths the 0.7.1 snapshot sections add (ALTER SYSTEM on archive_command, PUBLIC lo_export, pg_write_all_data
+  through a group, PUBLIC default privileges, WITH CHECK (true)), and corrects the pasted checklist: no ssl_negotiation
+  server setting, keep TLSv1.2, revoke TEMPORARY from PUBLIC, revoke CREATE (not ALL) on public, stage FORCE RLS, and
+  doesn't repeat its unverified CVE or 16.12 target.
 context:
   scaffold_script: place-files.sh

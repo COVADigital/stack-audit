@@ -2,7 +2,7 @@
   "_doc": "Minimum patched PostgreSQL minor release per supported major, for dbh.01. Update after every PostgreSQL security release (quarterly, plus out-of-cycle) from https://www.postgresql.org/support/versioning/ and https://www.postgresql.org/support/security/. audit_postgres.py warns when 'checked' is more than 120 days old.",
   "checked": "2026-11-21",
   "source": "https://www.postgresql.org/about/news/postgresql-187-1712-1616-1520-1425-and-19-rc-2-released-3442/",
-  "release": "2026-11-12: 18.7, 17.12, 16.16, 15.20, 14.25 (52 CVEs, including CVE-2026-6460, CVSS 8.8, arbitrary code execution via ALTER ... SET DATA TYPE, and CVE-2026-116311, DROP OWNED removing restrictive row security policies)",
+  "release": "2026-11-12: 18.7, 17.12, 16.16, 15.20, 14.25 (52 CVEs, including CVE-2026-6460, CVSS 8.8, arbitrary code execution via ALTER ... SET DATA TYPE, and CVE-2026-116311, DROP OWNED removing restrictive row security policies); 19.0 released 2026-11-19",
   "min_patched": {
     "19": "19.0",
     "18": "18.7",
@@ -13,8 +13,8 @@
   "eol_through": 14,
   "cve_extensions": {
     "dblink": "CVE-2026-120147 (code execution), CVE-2026-14661 (append to arbitrary files)",
-    "pgcrypto": "CVE-2026-2005 (code execution), CVE-2026-14663 (silently stores cleartext for OpenSSL-disabled ciphers)",
-    "pg_trgm": "CVE-2026-2007, CVE-2026-14678 (memory corruption / over-read)",
+    "pgcrypto": "CVE-2026-2005 (code execution), CVE-2026-14663 (silently encrypts to cleartext for OpenSSL-disabled ciphers)",
+    "pg_trgm": "CVE-2026-2007 (heap overflow write), CVE-2026-14678 (over-read)",
     "fuzzystrmatch": "CVE-2026-15742 (arbitrary write)",
     "intarray": "CVE-2026-2004 (code execution)",
     "refint": "CVE-2026-14671, CVE-2026-6637 (code execution, SQL injection)",

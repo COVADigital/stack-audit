@@ -13,17 +13,17 @@ psql -X -d "$DATABASE_URL" -f ${CLAUDE_PLUGIN_ROOT}/skills/data-standards/assets
 python ${CLAUDE_PLUGIN_ROOT}/skills/data-standards/scripts/audit_postgres.py --root . --snapshot <scratchpad>/pg-snapshot.jsonl --app-role app_user
 ```
 
-Run the snapshot as a superuser (or a role in `pg_read_all_settings` and `pg_read_all_stats`; `pg_hba_file_rules` and password hash types still need a superuser). It collects catalog metadata only: no rows, no password hashes, no client IPs.
+Run the snapshot as a superuser (or a role in `pg_read_all_settings` and `pg_read_all_stats`; `pg_hba_file_rules` and password hash types still need a superuser). It collects catalog metadata only: no rows, no password hashes, no client IPs. Tables, RLS, views and functions are per database, so run it once in **each** application database. Server-wide parts (roles, pg_hba, settings, database grants) are the same in every run. The audit lists the databases a snapshot didn't cover.
 
 ---
 
 ## 01. Run a Supported, Patched Minor Release
 **What:** The server's minor version (`SELECT version()`) against the latest security release for its major version. Client tools (`psql`, `pg_dump`) should be updated too.
-**Why:** The 2026-11-12 release (18.7, 17.12, 16.16, 15.20, 14.25) fixed 52 CVEs. They include CVE-2026-6460 (CVSS 8.8), in which a role that can create objects runs code as the OS user through `ALTER … SET DATA TYPE`, and CVE-2026-116311, in which `DROP OWNED` removes restrictive RLS policies on tables the role doesn't own. A leaked app password or one SQL injection is enough to reach these bugs. PostgreSQL 14 reached end-of-life with 14.25 and gets no more fixes. Minor upgrades are binary-compatible: new binaries (or image tag) and a restart, no `pg_upgrade`.
+**Why:** The 2026-11-12 release (18.7, 17.12, 16.16, 15.20, 14.25) fixed 52 CVEs. They include CVE-2026-6460 (CVSS 8.8), in which a type confusion after `ALTER … SET DATA TYPE` executes arbitrary code in the server process, and CVE-2026-116311, in which `DROP OWNED` removes restrictive RLS policies on tables the role doesn't own. A leaked app password or one SQL injection is enough to reach these bugs. PostgreSQL 14 reached end-of-life with 14.25 and gets no more fixes. Minor upgrades are binary-compatible: new binaries (or image tag) and a restart, no `pg_upgrade`.
 
 The official list (postgresql.org/support/security) shows three patterns worth acting on, beyond "patch the server":
 - **Client tools have their own CVEs.** `pg_dump`, `pg_restore`, `psql`, `pg_basebackup`, `reindexdb` and `vacuumdb` have had code-execution and SQL-injection bugs, several triggered by restoring a dump or archive from an untrusted server (CVE-2026-116314, CVE-2026-116330, CVE-2026-18408, CVE-2025-8714). Patch the machines that run backups and restores, not only the server.
-- **Some bugs need no login.** Pre-authentication flaws, such as CVE-2026-14679 (stack overflow, CVSS 8.2), CVE-2026-6479 (SSL/GSS denial of service) and CVE-2026-116322, can be reached by anyone who can open a TCP connection. Strong passwords don't help against these. Only network isolation (`dbh.03`) does.
+- **Some bugs need no login.** Pre-authentication flaws, such as CVE-2026-6479 (denial of service during SSL/GSS negotiation, CVSS 7.5) and CVE-2026-116322 (a cancel request leaking a spinlock), can be reached by anyone who can open a TCP connection. Strong passwords don't help against these. Only network isolation (`dbh.03`) does.
 - **Subscribe to the security announcements:** the pgsql-announce list, filtered to the Security tag.
 
 **Rule:** Production runs a supported major version at or above the minimum in `assets/pg-versions.json`, updated within days of a security release. End-of-life majors are upgraded. `psql` and `pg_dump` on admin and backup machines are updated too. The snapshot records the `psql` version that ran it.
@@ -38,7 +38,9 @@ The official list (postgresql.org/support/security) shows three patterns worth a
 REVOKE TEMPORARY, CREATE ON DATABASE app_db FROM PUBLIC;
 GRANT CONNECT ON DATABASE app_db TO app_user;   -- then REVOKE CONNECT … FROM PUBLIC if other roles shouldn't connect
 ```
-**Rule:** `PUBLIC` holds no `TEMPORARY` or `CREATE` on application databases. Grant `TEMPORARY` back only to a role that really uses temp tables, after testing it in staging.
+Privileges also arrive through role membership. If the app role is a member of a group that holds `TEMPORARY` or `CREATE`, it has them too, and the audit follows memberships to find this. `CREATE` on a database also lets a non-superuser install *trusted* extensions (PostgreSQL 13+), so "only superusers create extensions" holds only while nobody else has `CREATE`. `CONNECT` for `PUBLIC` is reported as info. Before you revoke it, grant `CONNECT` by name to the app, owner, backup and monitoring roles, or they lose access.
+
+**Rule:** `PUBLIC` and the app role (directly or through a group) hold no `TEMPORARY` or `CREATE` on application databases. Grant `TEMPORARY` back only to a role that really uses temp tables, after testing it in staging.
 
 ---
 
@@ -92,7 +94,11 @@ GRANT USAGE ON SCHEMA public TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
 ALTER DEFAULT PRIVILEGES FOR ROLE db_owner IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user;
 ```
-**Rule:** The live app connects as a non-superuser that owns no tables and holds no privilege `WITH GRANT OPTION`. Migrations (Drizzle Kit, Prisma Migrate) run as the owner role. `CREATEROLE` and `CREATEDB` belong to administrators only, and role attributes are reviewed periodically.
+Two shortcuts quietly undo the model:
+- **Membership.** `GRANT db_owner TO app_user` makes the app a member of the owner role. Even with `NOINHERIT`, it can `SET ROLE db_owner` (unless, on PostgreSQL 16+, the grant says `SET FALSE`) and then `ALTER`, `DROP` or read past RLS. The audit follows memberships transitively and reports app roles that reach an owner, superuser, `BYPASSRLS` or `CREATEROLE` role.
+- **Superuser-owned tables.** Tables owned by `postgres` mean migrations run as the superuser, so CI holds the superuser password. The three tiers collapse to two.
+
+**Rule:** The live app connects as a non-superuser that owns no tables, is not a member (directly or indirectly) of an owner or superuser role, and holds no privilege `WITH GRANT OPTION`. Tables are owned by a dedicated migration role, not a superuser. Migrations (Drizzle Kit, Prisma Migrate) run as that role. `CREATEROLE` and `CREATEDB` belong to administrators only, and role attributes are reviewed periodically. When the app connects as the bootstrap superuser (`postgres`), pass `--app-role postgres`, so the audit reports it as the app role instead of skipping it.
 
 ---
 
@@ -109,7 +115,9 @@ ALTER DEFAULT PRIVILEGES FOR ROLE db_owner REVOKE EXECUTE ON FUNCTIONS FROM PUBL
 ```
 CVE-2018-1058 showed the search-path risk. A role that can create objects in a schema on someone else's `search_path` can define a function or operator with a familiar name, such as `lower()` for `text`, which then runs with the privileges of whoever calls it. That includes migrations and superusers. The fix from the PostgreSQL community guide is to let nobody but the owner create objects in `public`, set `search_path` explicitly for roles (and in `postgresql.conf`), and schema-qualify names in functions and migrations.
 
-**Rule:** No `CREATE` on schemas and no table privileges for `PUBLIC`, and the app role can't create objects in any schema. `SECURITY DEFINER` functions have `EXECUTE` revoked from `PUBLIC` in the same migration that creates them, are granted by name, and are not owned by a superuser. Migrations grant to roles, never `TO PUBLIC`.
+**Default privileges grant to future objects.** `ALTER DEFAULT PRIVILEGES … GRANT SELECT ON TABLES TO PUBLIC` exposes every table the owner creates later, including tables that hold personal data. The snapshot reads `pg_default_acl` and reports grants to `PUBLIC` on future tables, sequences, schemas and large objects. `PUBLIC EXECUTE` on future functions is the built-in default; revoke it with `ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`.
+
+**Rule:** No `CREATE` on schemas, no table privileges and no default privileges for `PUBLIC`, and the app role can't create objects in any schema. `SECURITY DEFINER` functions have `EXECUTE` revoked from `PUBLIC` in the same migration that creates them, are granted by name, and are not owned by a superuser. Migrations grant to roles, never `TO PUBLIC`.
 
 ---
 
@@ -119,7 +127,11 @@ CVE-2018-1058 showed the search-path risk. A role that can create objects in a s
 
 **A real attack chain.** Imperva's honeypot (2018) watched attackers exploit this. They reached a public Postgres port and logged in as the superuser with a weak password. They wrote a binary to disk with `lo_export`, registered it as a C-language function (a sqlmap `sys_eval` wrapper) and used it to run shell commands. Finally they downloaded a cryptominer hidden inside an image file. Each step is a check here: the exposed port (`dbh.03`), superuser login over the network (`dbh.04`), C or untrusted-language functions that no extension owns, and large objects (both reported by the snapshot as possible signs of compromise). Blocking the database host's outbound internet access (egress firewall) breaks the last step.
 
-**Every extension and language is attack surface.** The 2026 releases fixed code-execution bugs in contrib modules (`dblink`, `pgcrypto`, `intarray`, `fuzzystrmatch`, `refint`, `pg_stat_statements`, `pg_trgm`) and many in the *trusted* languages `plperl` and `pltcl`. The snapshot lists the installed ones that had fixes (the list is in `assets/pg-versions.json`, kept with the version data). Logical replication is surface too: CVE-2026-120145 let a publisher execute code on its subscribers.
+**Every extension and language is attack surface.** The 2026 releases fixed code-execution bugs in contrib modules (`dblink`, `pgcrypto`, `intarray`, `fuzzystrmatch`, `refint`, `pg_stat_statements`, `pg_trgm`) and many in the *trusted* languages `plperl` and `pltcl`. The snapshot lists the installed ones that had fixes (the list is in `assets/pg-versions.json`, kept with the version data). Logical replication is surface too: CVE-2026-120145 let replication write to a subscriber's system catalogs and execute code there.
+
+**The file functions themselves.** `pg_read_file`, `pg_read_binary_file`, `pg_ls_dir`, `pg_stat_file`, server-side `lo_import`/`lo_export`, `pg_promote`, `pg_reload_conf` and `pg_rotate_logfile` are superuser-only by default. An explicit `GRANT EXECUTE` hands that power to another role, and the snapshot reports any grantee besides the owner and predefined roles. `lo_compat_privileges = on` turns off the large-object privilege checks added in PostgreSQL 9.0, so every role can read and write every large object again.
+
+**Parameter grants.** Since PostgreSQL 15, `GRANT SET` or `GRANT ALTER SYSTEM ON PARAMETER` hands superuser-only settings to other roles. On `archive_command`, `restore_command`, `*_preload_libraries` or `dynamic_library_path` that is code execution as the server's OS user. The snapshot reports every such grant (`dbh.06`).
 
 **Rule:** Install only the extensions the app needs, and drop the rest. Untrusted languages are absent, or usable by superusers only. Prefer no procedural language beyond PL/pgSQL. Subscriptions point only at publishers you control. Never grant `pg_execute_server_program`, `pg_read_server_files`, `pg_write_server_files`, `pg_read_all_data` or `pg_write_all_data` to app roles. The snapshot checks these memberships.
 
@@ -163,6 +175,8 @@ CREATE POLICY tenant_isolation ON projects
   WITH CHECK (tenant_id = (select current_setting('app.tenant_id', true))::uuid);
 CREATE INDEX CONCURRENTLY projects_tenant_idx ON projects (tenant_id);
 ```
+**`WITH CHECK (true)` on UPDATE moves rows between tenants.** The `USING` clause limits which rows a tenant can touch. `WITH CHECK` limits what those rows may become. With `true`, a tenant can `UPDATE projects SET tenant_id = '<other tenant>'` on its own rows and plant them in another tenant. Leave `WITH CHECK` out (it then reuses `USING`) or repeat the condition.
+
 **Fail closed.** A policy like `tenant_id = current_setting(…)::uuid OR current_setting(…) IS NULL`, or one that uses `coalesce(current_setting(…), …)`, returns every tenant's rows to any code path that forgot to set the context: a background job, a script, a new route. Permissive policies are combined with OR, so adding a second permissive policy widens access. A subquery inside a policy runs for every row.
 
 **Rule:** Every `INSERT`/`ALL` policy constrains new rows, no permissive policy is `true` for the app role, no policy falls back to all rows when the context is unset, each command has one permissive policy (extra conditions go in `AS RESTRICTIVE` policies), and policy settings are wrapped in `(select …)` with the tenant column indexed. Check critical queries with `EXPLAIN ANALYZE`. User filters that call non-`LEAKPROOF` functions (such as `ILIKE`) are applied after the security filter, so their indexes may go unused. Keep `LIKE`/`ILIKE` out of policies themselves: compare the tenant or owner column with `=` or `IN`.
@@ -206,7 +220,9 @@ LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 $$;
 REVOKE EXECUTE ON FUNCTION app.current_tenant_projects() FROM PUBLIC;
 ```
-**Rule:** Avoid `SECURITY DEFINER` where you can. When a function needs it, it sets `search_path` (with `pg_temp` last), schema-qualifies every name, and is granted by name.
+Pinning isn't enough by itself. When `pg_temp` isn't listed, PostgreSQL searches it **first** for tables and types, so `SET search_path = public` lets a caller's temporary table shadow `public.users`. A pinned path that names a schema where `PUBLIC` or the app role can `CREATE` is also hijackable. The widely copied `SET search_path = public, pg_temp` is safe only while nobody else can create objects in `public`. The audit checks both cases.
+
+**Rule:** Avoid `SECURITY DEFINER` where you can. When a function needs it, it sets `search_path` with `pg_temp` listed last and only schemas nobody else can write to (`pg_catalog, pg_temp` is safest), schema-qualifies every name, and is granted by name.
 
 ---
 
@@ -244,7 +260,7 @@ ALTER ROLE app_user CONNECTION LIMIT 50;
 **What:** `log_connections`, `log_disconnections`, `log_statement = 'ddl'`, `log_min_duration_statement` (for example `1000` ms), and a `log_line_prefix` such as `'%m [%p] user=%u,db=%d,app=%a,client=%h '`. Add `pgaudit` (in `shared_preload_libraries`) when you need DML audit trails.
 **Why:** After an incident, you need to know who connected from where, which schema changes ran, and which queries scraped data. Without these settings that record doesn't exist. Watch `pg_stat_user_tables.seq_scan` spikes and repeated authentication failures, too.
 
-**Rule:** Connection, disconnection and DDL logging are on, slow queries are logged (with bind parameters kept out, see `dbh.22`), and each log line names the user, database and client. Logs are shipped off the database host. For personal data, load `pgaudit` (`pgaudit.log = 'ddl, role, write'`, plus `read` on the tables that need it).
+**Rule:** Connection, disconnection and DDL logging are on, slow queries are logged (with bind parameters kept out, see `dbh.22`), and each log line names the user, database and client. Logs are shipped off the database host. For personal data, load `pgaudit` (`pgaudit.log = 'ddl, role, write'`, plus `read` on the tables that need it). Loading it without setting `pgaudit.log` audits nothing; the snapshot reports that.
 
 ---
 
@@ -252,7 +268,7 @@ ALTER ROLE app_user CONNECTION LIMIT 50;
 **What:** Volume or disk encryption (LUKS, cloud volume encryption) for the data directory and WAL. Application-layer AES-256-GCM (or `pgcrypto` with keys kept outside the database) for TOTP secrets, API tokens, and identifiers such as SSNs.
 **Why:** Open-source PostgreSQL has no transparent data encryption. Disk encryption protects against stolen disks and snapshots. App-layer encryption protects secrets from anyone who can query the table (see `dbs.06` for passwords, which are hashed, not encrypted).
 
-Prefer encrypting in the app over `pgcrypto`. CVE-2026-14663 showed `pgcrypto` silently storing cleartext when the requested cipher was disabled in OpenSSL, so test that ciphertext really differs from the input. With `pgp_sym_encrypt(data, key)` the key travels inside the SQL statement, so it can end up in the server log, in `pg_stat_activity`, and in `pg_stat_statements` for non-parameterized queries.
+Prefer encrypting in the app over `pgcrypto`. CVE-2026-14663 showed `pgcrypto` silently "encrypting" to cleartext when the requested cipher was disabled in OpenSSL, so test that ciphertext really differs from the input. With `pgp_sym_encrypt(data, key)` the key travels inside the SQL statement, so it can end up in the server log, in `pg_stat_activity`, and in `pg_stat_statements` for non-parameterized queries.
 
 **Rule:** Database volumes are encrypted. High-value secrets are encrypted before insert, with keys in a secret manager or environment vault, never in the database or in SQL text.
 
@@ -306,7 +322,7 @@ RETURN QUERY EXECUTE format('SELECT * FROM projects WHERE %I = $1', col) USING v
 ```
 Two server settings decide whether escaped strings stay escaped: `standard_conforming_strings` must be `on` and `backslash_quote` must stay at `safe_encoding`. Both are the defaults. Turning them back to the legacy values makes `\'` close a string, which revives old escaping-bypass injections. The snapshot checks both.
 
-Object names are input too. PostgreSQL's own tools (`pg_dump`, `reindexdb`, extension scripts, `REFRESH PUBLICATION`) have had SQL-injection CVEs triggered by crafted table, constraint or subscription names (CVE-2026-116318, CVE-2026-116325, CVE-2026-6638, CVE-2025-8715). If the app creates schemas or tables per tenant, build the names from an allow-listed slug (`^[a-z][a-z0-9_]{0,62}$`), never from raw user input.
+Object names are input too. PostgreSQL's own tools (`pg_dump`, `reindexdb`, extension scripts, `REFRESH PUBLICATION`) have had SQL-injection and code-execution CVEs triggered by crafted table, constraint, index or object names (CVE-2026-116318, CVE-2026-116325, CVE-2026-6638, CVE-2025-8715). If the app creates schemas or tables per tenant, build the names from an allow-listed slug (`^[a-z][a-z0-9_]{0,62}$`), never from raw user input.
 
 **Rule:** Dynamic SQL uses `format()` with `%I` for identifiers and `%L` for literals, or passes values with `EXECUTE … USING`. Identifiers that come from callers are also checked against an allow-list. `quote_ident()` / `quote_literal()` are acceptable for single values. The check skips lines that use them, so confirm the other pieces of the string by eye.
 
@@ -352,6 +368,10 @@ Where each common attack on a Postgres-backed app is covered. **Static** means a
 | Post-compromise backdoors: C functions (`sys_eval`), large-object staging (`lo_export`), cryptominers | `dbh.08` (live, signs of compromise); egress firewall (`dbh.20`) |
 | Search-path hijacking (CVE-2018-1058) | `dbh.07` (`PUBLIC` or app role `CREATE` on schemas), `dbh.14` |
 | Over-broad role attributes and re-grantable privileges | `dbh.06` (`SUPERUSER`/`CREATEROLE`/`CREATEDB`, `WITH GRANT OPTION`) |
+| Escalation through role membership (`SET ROLE` to the owner or a superuser, inherited `TEMP`/`CREATE`/predefined roles) | `dbh.06`, `dbh.02`, `dbh.08` (live, transitive memberships) |
+| Future objects exposed by default privileges | `dbh.07` (live, `pg_default_acl`) |
+| Server file functions granted to non-superusers (`pg_read_file`, `lo_export`) | `dbh.08` (live, function ACLs, `lo_compat_privileges`) |
+| Superuser-only settings granted to other roles (`ALTER SYSTEM` on `archive_command`) | `dbh.06` (live, `pg_parameter_acl`, PostgreSQL 15+) |
 | Sniffing / man-in-the-middle | `dbh.05`, `dbo.03` (`sslmode`, `rejectUnauthorized`) |
 | Leaked credentials (code, images, env, client bundle) | `sec.16`, `dbo.04`, container-standards `csec.*` |
 | Denial of service (runaway queries, connection floods, idle transactions) | `dbh.17`, `dbo.05`, web `net.15` rate limits |
@@ -389,6 +409,24 @@ Every technique below needs one thing: user input pasted into SQL text. Paramete
 Not detectable by any static or catalog check: logic flaws in authorization (who may see what), timing side channels, and attacks through app features that are working as designed. Cover these with tests that connect as the real app role and try to read and write another tenant's data, plus code review.
 
 ---
+
+## Corrections to common hardening checklists
+
+Checklists pasted into a request (blog posts, generated blueprints) often contain advice that is wrong or breaks production. When a request includes one of these, follow this file and say what you changed and why:
+
+| Checklist says | What to do instead |
+|---|---|
+| Set `ssl_negotiation = direct` in `postgresql.conf` | There is no such server setting. `sslnegotiation=direct` is a client connection option (libpq 17+, needs `sslmode=require` or stricter and ALPN), and only PostgreSQL 17+ servers with `ssl = on` accept it (`dbh.05`). |
+| `ssl_min_protocol_version = 'TLSv1.3'` | `TLSv1.2` (the default) until every client, driver and pooler is confirmed to support 1.3 (`dbh.05`). |
+| `REVOKE TEMPORARY ON DATABASE … FROM app_user` | A no-op when the privilege comes from `PUBLIC` (the default). Revoke from `PUBLIC`, and check group memberships (`dbh.02`). |
+| `REVOKE ALL ON SCHEMA public FROM PUBLIC` | This also removes `USAGE`, which breaks every role that calls extension functions in `public`. Revoke `CREATE` only, then grant `USAGE` by name (`dbh.07`). |
+| `REVOKE ALL ON DATABASE … FROM PUBLIC` | Grant `CONNECT` to the app, owner, backup and monitoring roles **first**, or they lose access at once (`dbh.02`). |
+| `REVOKE SELECT ON users …; GRANT SELECT (id, email, …)` | Correct, but Drizzle's `db.select().from(users)` and `SELECT *` name every column and fail with `permission denied`. Change the queries to list columns in the same release (`dbh.09`). |
+| `SET search_path = public, pg_temp` in definer functions | Safe only while nobody else can `CREATE` in `public`. Prefer `pg_catalog, pg_temp` with schema-qualified names (`dbh.14`). |
+| `FORCE ROW LEVEL SECURITY` on every table | Forcing also applies the policies to the owner, so data migrations and backfills run as the owner see only the rows the current setting allows. Force only where the app connects as the owner, after testing migrations (`dbh.10`). |
+| `EXPLAIN ANALYZE` the critical queries in production | `EXPLAIN ANALYZE` executes the statement. Use plain `EXPLAIN` in production, and `EXPLAIN ANALYZE` in staging or inside `BEGIN … ROLLBACK`. |
+| Revoking `TEMPORARY` protects against a code-execution CVE | It narrows the surface, but only the patched minor release fixes the bug (`dbh.01`). Check each CVE's description on postgresql.org/support/security rather than the checklist's summary. |
+| `ALTER ROLE app_user SET statement_timeout …` takes effect | Only for new sessions. Recycle the app's pool or restart it (`dbh.17`). |
 
 ## Staged rollout (zero outages)
 

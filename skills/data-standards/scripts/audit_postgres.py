@@ -28,7 +28,7 @@ SNAPSHOT_VERSION = 1
 
 TENANT_COL = re.compile(r"^(tenant|org|organization|organisation|workspace|account|team|company|owner|user)_?id$", re.I)
 SENSITIVE_COL = re.compile(r"passw|secret|token|api_?key|private_?key|totp|mfa|otp|(^|_)ssn($|_)|social_security|tax_?id|"
-                           r"birth|(^|_)dob($|_)|iban|card_?num|cvv|recovery", re.I)
+                           r"birth|(^|_)dob($|_)|iban|card_?num|cvv|recovery|passport|national_?id|drivers?_?licen[cs]e", re.I)
 NOT_SENSITIVE_COL = re.compile(r"(_at|At|_expires?|Expires?|_type|Type|_count|Count|_length|_hint)$")
 RISKY_EXTENSIONS = {"adminpack", "file_fdw", "dblink", "postgres_fdw", "http", "pg_net", "plpython3u", "plpythonu", "plpython2u", "plperlu", "pltclu", "lo"}
 UNTRUSTED_LANG = re.compile(r"^pl\w*u$", re.I)
@@ -66,6 +66,40 @@ CONF_FILE = re.compile(r"(^|/)postgresql[\w.-]*\.conf$")
 HBA_FILE = re.compile(r"(^|/)pg_hba[\w.-]*\.conf$")
 
 ROLLOUT = "see the staged rollout in references/23-postgres-hardening.md"
+# Predefined roles an app role must not reach (directly or through a group): why, severity.
+PREDEFINED = {"pg_signal_backend": ("can cancel or terminate other sessions: denial of service", "warn"),
+              "pg_read_all_stats": ("can read every session's query text and statistics", "info"),
+              "pg_monitor": ("can read every session's query text and statistics", "info"),
+              "pg_read_all_data": ("can read every table and sequence, in every schema", "error"),
+              "pg_write_all_data": ("can write every table and sequence, in every schema", "error"),
+              **{r: ("server file or program access from SQL", "error") for r in (
+                  "pg_execute_server_program", "pg_read_server_files", "pg_write_server_files")}}
+SEARCH_PATH = re.compile(r"\bSET\s+search_path\s*(?:=|\bTO\b)\s*((?:\"?[\w$]+\"?\s*,\s*)*\"?[\w$]+\"?)", re.I)
+
+
+def closure(edges: dict[str, set[str]], start: str) -> set[str]:
+    """Every role `start` is a member of, directly or through other roles."""
+    seen, todo = set(), [start]
+    while todo:
+        for g in edges.get(todo.pop(), ()):
+            if g not in seen:
+                seen.add(g)
+                todo.append(g)
+    return seen
+
+
+def path_problem(value: str, unsafe: set[str] = frozenset()) -> str | None:
+    """A pinned SECURITY DEFINER search_path ('pg_catalog, pg_temp') -> what is wrong with it, or None."""
+    parts = [p.strip().strip('"').lower() for p in value.split(",") if p.strip().strip('"\'')]
+    if not parts:   # search_path = '': every name must be schema-qualified, so pg_temp shadows nothing in practice
+        return None
+    if "pg_temp" not in parts:
+        return "doesn't list pg_temp, and an unlisted pg_temp is searched first: a caller's temporary table can shadow the tables it reads"
+    if parts[-1] != "pg_temp":
+        return "puts pg_temp before other schemas: a caller's temporary objects are found first"
+    if hit := sorted(set(parts) & unsafe):
+        return f"includes schema {', '.join(hit)}, where PUBLIC or the app role can create objects"
+    return None
 
 
 class SnapshotError(ValueError):
@@ -234,7 +268,9 @@ class PostgresAudit(Audit):
                     if report:
                         self.dynamic_sql(st.raw, mt.group(1) if mt.re is FUNCTION else None, loc)
                     if report and mt.re is FUNCTION and re.search(r"\bSECURITY\s+DEFINER\b", sql, re.I):
-                        definers.append((table_name(mt.group(1)), bool(re.search(r"\bSET\s+search_path\b", sql, re.I)), loc))
+                        path = SEARCH_PATH.search(sql)
+                        definers.append((table_name(mt.group(1)), bool(re.search(r"\bSET\s+search_path\b", sql, re.I)),
+                                         path.group(1) if path else None, loc))
                 elif mt := ALTER_FUNCTION_PATH.match(sql):
                     pinned.add(table_name(mt.group(1)))
                 elif mt := re.match(rf"^\s*REVOKE\s+(?:EXECUTE|ALL)[\s\S]*?\bON\s+(?:FUNCTION|PROCEDURE|ROUTINE)\s+({IDENT})[\s\S]*\bFROM\s+[\s\S]*\bPUBLIC\b", sql, re.I):
@@ -257,10 +293,13 @@ class PostgresAudit(Audit):
             elif enabled and not ok and name not in invoker:
                 self.add("dbh.13", f"View `{name}` runs with its owner's rights, so RLS on the tables it reads doesn't apply to callers",
                          **loc, fix_hint="CREATE VIEW … WITH (security_invoker = true) AS … (PostgreSQL 15+)")
-        for name, has_path, loc in definers:
+        for name, has_path, path, loc in definers:
             if not has_path and name not in pinned:
                 self.add("dbh.14", f"SECURITY DEFINER function `{name}` doesn't pin search_path (search-path hijacking)", **loc,
                          fix_hint="Add SET search_path = pg_catalog, pg_temp (and schema-qualify names), or ALTER FUNCTION … SET search_path")
+            elif path and (why := path_problem(path)):
+                self.add("dbh.14", f"SECURITY DEFINER function `{name}` pins search_path `{path}` but {why}", severity="warn", **loc,
+                         fix_hint="SET search_path = pg_catalog, pg_temp (pg_temp last) and schema-qualify names")
             if name not in revoked:  # functions get EXECUTE for PUBLIC at creation
                 self.add("dbh.07", f"SECURITY DEFINER function `{name}` keeps the default EXECUTE for PUBLIC: every role runs it with its owner's rights",
                          **loc, fix_hint=f"REVOKE EXECUTE ON FUNCTION {name}(<exact argument types>) FROM PUBLIC; GRANT EXECUTE … TO the roles that need it")
@@ -373,6 +412,10 @@ class PostgresAudit(Audit):
         if s.get("ssl_min_protocol_version", "").lower() in ("tlsv1", "tlsv1.1"):
             self.add("dbh.05", f"ssl_min_protocol_version allows {s['ssl_min_protocol_version']}", **at("ssl_min_protocol_version"),
                      fix_hint="TLSv1.2 (the default); TLSv1.3 once every client supports it")
+        if s.get("lo_compat_privileges", "").lower() in ("on", "true", "1"):
+            self.add("dbh.08", "lo_compat_privileges is on: large-object permission checks are off, so any role can read, overwrite "
+                               "or delete every large object", severity="warn", **at("lo_compat_privileges"),
+                     fix_hint="lo_compat_privileges = off (the default)")
         pe = s.get("password_encryption")
         if pe is not None and pe.lower() not in ("scram-sha-256",):
             self.add("dbh.16", f"password_encryption is `{pe}`: new passwords are stored as MD5 hashes", **at("password_encryption"),
@@ -462,12 +505,23 @@ class PostgresAudit(Audit):
                               and n != bootstrap}
             if self.app_roles:
                 self.report.skipped.append(f"App role inferred as {', '.join(sorted(self.app_roles))}: pass --app-role to pin it")
+        edges: dict[str, set[str]] = {}
+        for m in snap.get("memberships", []):
+            edges.setdefault(m.get("role"), set()).add(m.get("granted"))
+        self.via: dict[str, str] = {}   # role an app role is a member of (transitively) -> that app role
+        for a in sorted(self.app_roles):
+            for g in closure(edges, a) - self.app_roles:
+                self.via.setdefault(g, a)
+        others = sorted({r.get("database") for r in snap.get("databases", [])} - {meta.get("database"), "postgres", None})
+        if others:
+            self.report.not_checked.append(f"Snapshot covers database `{meta.get('database')}` only: tables, RLS, views and functions in "
+                                           f"{', '.join(others[:8])} not checked (run pg_snapshot.sql in each app database)")
         self.relations = {f"{r['schema']}.{r['name']}": r for r in snap.get("relations", [])}
         self.rls = {k for k, r in self.relations.items() if r.get("rls")}
         self.major = (meta.get("server_version_num") or 0) // 10000
 
         self.live_version(meta)
-        self.live_database_grants(snap.get("databases", []))
+        self.live_database_grants(snap.get("databases", []), meta.get("database"))
         settings = {r["name"]: r.get("setting") or "" for r in snap.get("settings", [])}
         superusers = {r["role"] for r in snap.get("roles", []) if r.get("superuser") and r.get("login")} or {"postgres"}
         broad = self.check_hba(hba_live_rows(snap.get("hba", [])), self.where, superusers) if "hba" in snap else False
@@ -477,6 +531,9 @@ class PostgresAudit(Audit):
                 self.add("dbh.18", "pgaudit isn't loaded: no audit trail of who read or changed personal data", file=self.where,
                          severity="info", fix_hint="shared_preload_libraries = 'pgaudit' and pgaudit.log = 'ddl, role, write' "
                                                    "(add 'read' only for tables that need it)")
+            elif settings.get("pgaudit.log", "x").strip().lower() in ("none", ""):
+                self.add("dbh.18", "pgaudit is loaded but pgaudit.log is `none`: nothing is audited", file=self.where, severity="info",
+                         fix_hint="ALTER SYSTEM SET pgaudit.log = 'ddl, role, write'; SELECT pg_reload_conf();")
             mode = settings.get("data_directory_mode")
             if mode and mode not in ("0700", "700"):
                 self.add("dbh.20", f"Data directory mode is {mode}: other local users can read table and WAL files", file=self.where,
@@ -526,16 +583,27 @@ class PostgresAudit(Audit):
             self.report.not_checked.append("dbh.01 client tools: snapshot has no `client` section (psql older than 11?); "
                                            "check `psql --version` and `pg_dump --version`")
 
-    def live_database_grants(self, rows: list[dict]) -> None:
+    def live_database_grants(self, rows: list[dict], current: str | None) -> None:
         by_db: dict[tuple[str, str], set[str]] = {}
+        connect = set()
         for r in rows:
             who = r.get("grantee")
-            if (who == "PUBLIC" or who in self.app_roles) and r.get("privilege") in ("TEMPORARY", "CREATE"):
+            if r.get("database") == "postgres" and current != "postgres":  # maintenance database, not an app database
+                continue
+            if who == "PUBLIC" and r.get("privilege") == "CONNECT":
+                connect.add(r["database"])
+            if (who == "PUBLIC" or who in self.app_roles or who in self.via) and r.get("privilege") in ("TEMPORARY", "CREATE"):
                 by_db.setdefault((r["database"], who), set()).add(r["privilege"])
         for (db, who), privs in sorted(by_db.items()):
-            subject = "PUBLIC" if who == "PUBLIC" else f"App role `{who}`"
-            self.flag("dbh.02", f"{subject} has {' and '.join(sorted(privs))} on database `{db}` (it can create temporary objects or schemas)",
+            subject = ("PUBLIC" if who == "PUBLIC" else f"App role `{who}`" if who in self.app_roles
+                       else f"Role `{who}` (app role `{self.via[who]}` is a member)")
+            extra = ", or install trusted extensions" if "CREATE" in privs else ""
+            self.flag("dbh.02", f"{subject} has {' and '.join(sorted(privs))} on database `{db}` (it can create temporary objects or schemas{extra})",
                       fix_hint=f"REVOKE TEMPORARY, CREATE ON DATABASE {db} FROM {who}; grant TEMPORARY back only to roles that need it")
+        if connect:
+            self.flag("dbh.02", f"PUBLIC can connect to database(s) {', '.join(sorted(connect)[:8])}: any role pg_hba admits can log in to them",
+                      severity="info", fix_hint="GRANT CONNECT ON DATABASE … TO the app, owner, backup and monitoring roles first, "
+                                                "then REVOKE CONNECT ON DATABASE … FROM PUBLIC")
 
     def live_sessions(self, meta: dict, rows: list[dict], roles: dict) -> None:
         if not (meta.get("is_superuser") or meta.get("can_read_stats")):
@@ -555,12 +623,15 @@ class PostgresAudit(Audit):
 
     def live_roles(self, roles: dict, bootstrap: str | None) -> None:
         for name, r in sorted(roles.items()):
-            if not r.get("login") or name == bootstrap:
+            if not r.get("login") or (name == bootstrap and name not in self.app_roles):
                 continue
             attrs = [a.upper() for a in ("superuser", "createrole", "createdb", "replication", "bypassrls") if r.get(a)]
             if name in self.app_roles and attrs:
-                self.flag("dbh.06", f"App role `{name}` has {', '.join(attrs)}", severity="error",
-                          fix_hint=f"ALTER ROLE {name} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS")
+                self.flag("dbh.06", f"App role `{name}` has {', '.join(attrs)}"
+                          + (": the app connects as the bootstrap superuser" if name == bootstrap else ""), severity="error",
+                          fix_hint="Create a separate NOSUPERUSER app role and point the app's connection string at it (the bootstrap "
+                                   "superuser can't drop SUPERUSER)" if name == bootstrap else
+                                   f"ALTER ROLE {name} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS")
             elif r.get("superuser"):
                 self.flag("dbh.06", f"Login role `{name}` is a second superuser", severity="info",
                           fix_hint="Keep one superuser for emergencies; use NOSUPERUSER roles for migrations and the app")
@@ -571,14 +642,33 @@ class PostgresAudit(Audit):
             if name in self.app_roles and int(r.get("owned_tables") or 0):
                 self.flag("dbh.06", f"App role `{name}` owns {r['owned_tables']} table(s): owners bypass RLS and can ALTER or DROP them",
                           severity="warn", fix_hint="Let a migration role own the tables (ALTER TABLE … OWNER TO db_owner); grant the app DML only")
+        for g, a in sorted(self.via.items()):
+            gr = roles.get(g, {})
+            why = [w for w, hit in (("SUPERUSER", gr.get("superuser")), ("BYPASSRLS", gr.get("bypassrls")),
+                                    ("CREATEROLE", gr.get("createrole")),
+                                    (f"owns {gr.get('owned_tables')} table(s)", int(gr.get("owned_tables") or 0))) if hit]
+            if why:
+                self.flag("dbh.06", f"App role `{a}` is a member of `{g}` ({', '.join(why)}): it can SET ROLE {g} and act with those "
+                                    "rights (bypass RLS, ALTER or DROP tables)", severity="error", fix_hint=f"REVOKE {g} FROM {a}")
+        su = {n for n, r in roles.items() if r.get("superuser")}
+        by_su: dict[str, int] = {}
+        for rel in self.relations.values():
+            if rel.get("kind") in ("r", "p") and rel.get("owner") in su:
+                by_su[rel["owner"]] = by_su.get(rel["owner"], 0) + 1
+        for owner, n in sorted(by_su.items()):
+            self.flag("dbh.06", f"{n} table(s) are owned by superuser `{owner}`: migrations run as a superuser instead of a separate "
+                                "owner role", severity="warn",
+                      fix_hint="CREATE ROLE db_owner NOLOGIN (or LOGIN for CI only); ALTER TABLE … OWNER TO db_owner; run migrations as db_owner")
 
     def live_privileges(self, snap: dict) -> None:
         for r in snap.get("schemas", []):
             if r.get("grantee") == "PUBLIC" and r.get("privilege") == "CREATE":
                 self.flag("dbh.07", f"PUBLIC can create objects in schema `{r['schema']}`",
                           fix_hint=f"REVOKE CREATE ON SCHEMA {r['schema']} FROM PUBLIC (the default since PostgreSQL 15)")
-            elif r.get("grantee") in self.app_roles and r.get("privilege") == "CREATE" and r.get("grantee") != r.get("owner"):
-                self.flag("dbh.07", f"App role `{r['grantee']}` can create objects in schema `{r['schema']}`: injected SQL can plant "
+            elif (r.get("grantee") in self.app_roles or r.get("grantee") in self.via) and r.get("privilege") == "CREATE" \
+                    and r.get("grantee") != r.get("owner"):
+                who = f"`{r['grantee']}`" if r["grantee"] in self.app_roles else f"`{self.via[r['grantee']]}` (through `{r['grantee']}`)"
+                self.flag("dbh.07", f"App role {who} can create objects in schema `{r['schema']}`: injected SQL can plant "
                                     "functions or operators that other roles pick up through search_path (CVE-2018-1058 pattern)",
                           fix_hint=f"REVOKE CREATE ON SCHEMA {r['schema']} FROM {r['grantee']}")
         for key, rel in sorted(self.relations.items()):
@@ -609,14 +699,37 @@ class PostgresAudit(Audit):
             privs = sorted({g["privilege"] for g in r.get("grants") or [] if g.get("grantee") == "PUBLIC"})
             if privs:
                 self.flag("dbh.07", f"PUBLIC has {', '.join(privs)} on `{key}`", fix_hint=f"REVOKE ALL ON {key} FROM PUBLIC; grant the app role by name")
-        reasons = {"pg_signal_backend": ("can cancel or terminate other sessions: denial of service", "warn"),
-                   "pg_read_all_stats": ("can read every session's query text and statistics", "info"),
-                   "pg_monitor": ("can read every session's query text and statistics", "info")}
         for m in snap.get("memberships", []):
-            if m.get("role") in self.app_roles:
-                why, sev = reasons.get(m.get("granted"), ("server file or program access from SQL", "error"))
-                self.flag("dbh.08", f"App role `{m['role']}` is a member of `{m['granted']}` ({why})",
-                          severity=sev, fix_hint=f"REVOKE {m['granted']} FROM {m['role']}")
+            role, granted = m.get("role"), m.get("granted")
+            if granted not in PREDEFINED or not (role in self.app_roles or role in self.via):
+                continue
+            why, sev = PREDEFINED[granted]
+            subject = f"App role `{role}`" if role in self.app_roles else f"Role `{role}` (app role `{self.via[role]}` is a member)"
+            self.flag("dbh.08", f"{subject} is a member of `{granted}` ({why})", severity=sev, fix_hint=f"REVOKE {granted} FROM {role}")
+        for f in snap.get("function_grants", []):
+            who = f.get("grantee")
+            hit = who == "PUBLIC" or who in self.app_roles or who in self.via
+            self.flag("dbh.08", f"{'PUBLIC' if who == 'PUBLIC' else f'Role `{who}`'} can execute `{f['name']}()` (server file, large-object "
+                                "or admin function; superuser only by default)", severity="error" if hit else "warn",
+                      fix_hint=f"REVOKE EXECUTE ON FUNCTION pg_catalog.{f['name']}(<each overload's argument types>) FROM {who}")
+        for g in snap.get("parameter_grants", []):
+            who, param = g.get("grantee"), g.get("parameter") or ""
+            runs_code = bool(re.search(r"_command$|librar", param))   # archive/restore_command, *_preload_libraries, dynamic_library_path
+            self.flag("dbh.06", f"{'PUBLIC' if who == 'PUBLIC' else f'Role `{who}`'} has {g.get('privilege')} on parameter `{param}`"
+                      + (": it runs programs or loads libraries as the server's OS user" if runs_code else
+                         " (superuser-only by default)"),
+                      severity="error" if runs_code or who == "PUBLIC" or who in self.app_roles or who in self.via else "warn",
+                      fix_hint=f"REVOKE {g.get('privilege')} ON PARAMETER {g.get('parameter')} FROM {who}")
+        kinds = {"r": "tables", "S": "sequences", "n": "schemas", "L": "large objects"}
+        future: dict[tuple[str, str, str], set[str]] = {}
+        for d in snap.get("default_acls", []):
+            if d.get("grantee") == "PUBLIC" and d.get("objtype") in kinds:   # functions and types grant PUBLIC by default anyway
+                future.setdefault((d.get("role"), d.get("schema"), d["objtype"]), set()).add(d.get("privilege"))
+        for (role, schema, kind), privs in sorted(future.items()):
+            where = "every schema" if schema == "*" else f"schema `{schema}`"
+            self.flag("dbh.07", f"Default privileges of `{role}` grant {', '.join(sorted(privs))} on future {kinds[kind]} in {where} to PUBLIC",
+                      severity="warn", fix_hint=f"ALTER DEFAULT PRIVILEGES FOR ROLE {role}"
+                                                f"{'' if schema == '*' else ' IN SCHEMA ' + schema} REVOKE ALL ON {kinds[kind].upper()} FROM PUBLIC")
         versions = json.loads((SKILL / "assets" / "pg-versions.json").read_text(encoding="utf-8"))
         for lang in snap.get("languages", []):
             base = lang["name"].rstrip("u") if lang["name"].endswith("u") else lang["name"]
@@ -637,7 +750,7 @@ class PostgresAudit(Audit):
                           fix_hint=f"DROP EXTENSION {ext['name']} if unused; if used, apply every minor release and REVOKE its functions from PUBLIC where possible")
         for sub in snap.get("subscriptions", []):
             self.flag("dbh.08", f"Logical replication subscription `{sub['name']}`: the subscriber trusts its publisher completely "
-                                "(CVE-2026-120145 let a publisher execute code on subscribers)", severity="info",
+                                "(CVE-2026-120145: replication could write to the subscriber's system catalogs and execute code)", severity="info",
                       fix_hint="Subscribe only to publishers you control, over TLS, and keep both sides patched")
         for pub in snap.get("publications", []):
             if pub.get("all_tables"):
@@ -697,14 +810,26 @@ class PostgresAudit(Audit):
             if len(names) > 1:
                 self.flag("dbh.11", f"{len(names)} permissive {cmd} policies on `{key}` ({', '.join(names)}) are OR-ed: each one widens access",
                           severity="info", fix_hint="Keep one permissive policy per command and add extra conditions AS RESTRICTIVE")
+        def hits_app(p: dict) -> bool:
+            roles = {x.lower() for x in p.get("roles") or []}
+            return bool("public" in roles or self.app_roles & roles)
+
+        # Restrictive policies are AND-ed onto the permissive ones: `USING (true)` plus a restrictive tenant policy is the
+        # recommended split, not an open table.
+        narrowed = {(f"{p['schema']}.{p['name']}", p.get("cmd")) for p in policies if p.get("permissive") == "RESTRICTIVE"
+                    and hits_app(p) and (p.get("qual") or p.get("with_check") or "true").strip() != "true"}
         for p in policies:
             key, roles = f"{p['schema']}.{p['name']}", [x.lower() for x in p.get("roles") or []]
             where = f"Policy `{p['policy']}` on `{key}`"
             if p.get("cmd") == "INSERT" and not p.get("with_check"):
                 self.flag("dbh.11", f"{where} (INSERT) has no WITH CHECK: any row can be inserted", severity="error")
-            expr = (p.get("qual") or p.get("with_check") or "").strip()
-            if p.get("permissive") == "PERMISSIVE" and expr == "true" and ("public" in roles or self.app_roles & set(roles)):
+            reaches = (p.get("permissive") == "PERMISSIVE" and hits_app(p)
+                       and not ({(key, "ALL"), (key, p.get("cmd"))} & narrowed))
+            if reaches and (p.get("qual") or p.get("with_check") or "").strip() == "true":
                 self.flag("dbh.11", f"{where} allows every row (`true`) for {', '.join(roles)}")
+            elif reaches and p.get("qual") and (p.get("with_check") or "").strip() == "true":
+                self.flag("dbh.11", f"{where} has WITH CHECK (true): {', '.join(roles)} can write rows with any tenant value, "
+                                    "moving them into another tenant", fix_hint="Repeat the USING condition in WITH CHECK, or drop WITH CHECK so USING applies")
             text = f"{p.get('qual') or ''} {p.get('with_check') or ''}"
             self.policy_perf(text, key, {"file": self.where})
 
@@ -726,10 +851,18 @@ class PostgresAudit(Audit):
                               "(materialized views ignore RLS)", fix_hint=f"REVOKE SELECT ON {key} FROM {', '.join(who)}")
 
     def live_functions(self, rows: list[dict]) -> None:
+        writers = self.app_roles | set(self.via)
+        unsafe = {r["schema"].lower() for r in self.snap.get("schemas", []) if r.get("privilege") == "CREATE"
+                  and (r.get("grantee") == "PUBLIC" or (r.get("grantee") in writers and r.get("grantee") != r.get("owner")))}
         for f in rows:
-            if not any(str(c).startswith("search_path=") for c in f.get("config") or []):
-                self.flag("dbh.14", f"SECURITY DEFINER function `{f['schema']}.{f['name']}` (owner `{f.get('owner')}`) doesn't pin search_path",
-                          fix_hint=f"ALTER FUNCTION {f['schema']}.{f['name']} SET search_path = pg_catalog, pg_temp")
+            path = next((str(c).split("=", 1)[1] for c in f.get("config") or [] if str(c).startswith("search_path=")), None)
+            name = f"{f['schema']}.{f['name']}"
+            if path is None:
+                self.flag("dbh.14", f"SECURITY DEFINER function `{name}` (owner `{f.get('owner')}`) doesn't pin search_path",
+                          fix_hint=f"ALTER FUNCTION {name} SET search_path = pg_catalog, pg_temp")
+            elif why := path_problem(path, unsafe):
+                self.flag("dbh.14", f"SECURITY DEFINER function `{name}` pins search_path `{path}` but {why}", severity="warn",
+                          fix_hint=f"ALTER FUNCTION {name} SET search_path = pg_catalog, pg_temp (and schema-qualify names)")
 
     def live_side_channels(self, uniques: list[dict], cascades: list[dict]) -> None:
         for u in uniques:
