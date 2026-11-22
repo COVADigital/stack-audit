@@ -20,20 +20,26 @@ TIMEOUT_S = 20
 MAX_FINDINGS = 8
 MAX_FILES = 5  # a large Codex patch gets a full audit, not a slow hook
 PATCH_FILE = re.compile(r"^\*\*\* (?:Add File|Update File|Move to): (.+?)\s*$", re.M)
+SESSION_SETTING = re.compile(r"set_config|\bSET\s+(SESSION\s+)?\"?[a-z_]\w*\.[a-z_]\w*", re.I)  # tenant context in SQL strings
 
 
 def scripts_for(file: Path) -> list[Path]:
     name = file.name
     if re.search(r"\.(tsx?|jsx?|mjs|cjs)$", name) and not re.search(r"\.d\.ts$", name):
         scripts = [WEB / "audit_security.py"]
-        try:  # Drizzle schema files also get the schema audit
-            if "drizzle-orm/pg-core" in file.read_text(encoding="utf-8", errors="replace"):
+        try:  # Drizzle schema files also get the schema audit; session-level tenant settings get dbh.12
+            text = file.read_text(encoding="utf-8", errors="replace")
+            if "drizzle-orm/pg-core" in text:
                 scripts.append(DATA / "audit_schema.py")
+            if SESSION_SETTING.search(text):
+                scripts.append(DATA / "audit_postgres.py")
         except OSError:
             pass
         return scripts
-    if name.endswith(".sql"):
-        return [DATA / "audit_migrations.py"]  # reports nothing unless the file is a migration
+    if name.endswith(".sql"):  # both report nothing unless the file is a migration
+        return [DATA / "audit_migrations.py", DATA / "audit_postgres.py"]
+    if re.match(r"(postgresql|pg_hba)[\w.-]*\.conf$", name):
+        return [DATA / "audit_postgres.py"]
     if re.match(r"(Dockerfile|Containerfile)(\..+)?$|.+\.Dockerfile$", name):
         return [CONTAINERS / "audit_dockerfile.py"]
     if re.match(r"(docker-)?compose([.-][\w.-]+)?\.ya?ml$", name):

@@ -194,6 +194,18 @@ class PostEditHookTests(unittest.TestCase):
         self.assertIn("dbm.02", ctx)
         self.assertEqual(self.run_hook("docs/notes.sql", 'ALTER TABLE "u" ADD COLUMN "e" text NOT NULL;\n'), "")
 
+    def test_postgres_hardening_on_edit(self):
+        (self.dir / "drizzle.config.ts").write_text("export default { out: 'drizzle' };\n", encoding="utf-8")
+        (self.dir / "drizzle" / "0000_rls").mkdir(parents=True)
+        (self.dir / "drizzle" / "0000_rls" / "migration.sql").write_text(
+            'CREATE TABLE "p" ("id" int primary key);\nALTER TABLE "p" ENABLE ROW LEVEL SECURITY;\n', encoding="utf-8")
+        ctx = self.run_hook("drizzle/0001_pol/migration.sql", 'CREATE POLICY "ok" ON "p" FOR SELECT USING (id > 0);\n'
+                                                           'CREATE POLICY "ins" ON "p" FOR INSERT TO app;\n')
+        self.assertIn("dbh.11 line 2", ctx)
+        self.assertNotIn("dbh.10", ctx)  # RLS enabled in an earlier migration still counts in --files mode
+        self.assertIn("dbh.04", self.run_hook("docker/pg_hba.conf", "host all all 0.0.0.0/0 trust\n"))
+        self.assertIn("dbh.12", self.run_hook("src/db/tenant.ts", "export const f = (db, id) => db.execute(sql`SET app.tenant = ${id}`);\n"))
+
     def test_compose_secret(self):
         ctx = self.run_hook("compose.yaml", "services:\n  db:\n    image: postgres:17\n"
                                             "    environment: { POSTGRES_PASSWORD: hunter2 }\n")

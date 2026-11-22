@@ -1,6 +1,6 @@
 {
   "name": "stack-audit",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Engineering standards and read-only audits for React/Next.js apps, Postgres/Drizzle databases, Docker/Compose stacks, and OWASP-backed security and ASVS self-assessment.",
   "author": { "name": "Joseph Bain" },
   "homepage": "https://github.com/COVADigital/stack-audit",
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Stack Audit",
     "shortDescription": "Standards and read-only audits for Next.js, Postgres, Docker and OWASP",
-    "longDescription": "Four skills with citable rules and read-only audit scripts: web-standards (React/Next.js), data-standards (Postgres/Drizzle schemas and migrations), container-standards (Dockerfiles, Compose, Docker hosts, optional Coolify live checks) and owasp-security (OWASP cheat sheets and ASVS 5.0). Findings cite rule IDs with file:line and a fix.",
+    "longDescription": "Four skills with citable rules and read-only audit scripts: web-standards (React/Next.js), data-standards (Postgres/Drizzle schemas, migrations and server hardening), container-standards (Dockerfiles, Compose, Docker hosts, optional Coolify live checks) and owasp-security (OWASP cheat sheets and ASVS 5.0). Findings cite rule IDs with file:line and a fix.",
     "developerName": "Joseph Bain",
     "category": "Productivity",
     "capabilities": ["Instructions", "Lifecycle hooks"],

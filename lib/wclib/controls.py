@@ -78,7 +78,7 @@ NOT_APPLICABLE = {"V1.4": "memory-unsafe / unmanaged code: not applicable to a J
 # IndexASVS mapping (Docker_Security -> V13.2). Rules with no defensible ASVS section are left out.
 EVIDENCE: dict[str, tuple[str, ...]] = {
     "sec.01": ("V1.2", "V1.3", "V3.2"), "sec.02": ("V3.5",), "sec.03": ("V3.4",), "sec.04": ("V3.4",), "sec.05": ("V3.4",),
-    "sec.06": ("V3.3",), "sec.07": ("V14.3", "V7.2"), "sec.08": ("V10.2",), "sec.09": ("V9.1",), "sec.10": ("V1.2", "V1.3", "V2.2"),
+    "sec.06": ("V3.3",), "sec.07": ("V14.3", "V7.2"), "sec.08": ("V10.2",), "sec.09": ("V9.1",), "sec.10": ("V1.2", "V1.3", "V2.2", "V15.3"),
     "sec.11": ("V15.2",), "sec.12": ("V3.6",), "sec.13": ("V12.2", "V3.4"), "sec.14": ("V3.2",), "sec.15": ("V3.4",),
     "sec.16": ("V13.3", "V14.2"), "sec.17": ("V8.2", "V8.3", "V6.3"), "sec.18": ("V7.3",), "sec.19": ("V3.4",),
     "sec.20": ("V3.6",), "sec.21": ("V1.3",), "sec.22": ("V3.7",), "sec.23": ("V11.5",),
@@ -93,6 +93,11 @@ EVIDENCE: dict[str, tuple[str, ...]] = {
     "csec.06": ("V13.3",), "csec.07": ("V13.2",), "host.02": ("V13.2",), "host.06": ("V13.2",), "cool.01": ("V13.2",), "cool.02": ("V13.2",),
     "cool.04": ("V13.3",), "cool.05": ("V13.2",),
     "dbs.06": ("V11.4",), "dbo.03": ("V12.3",), "dbo.04": ("V13.2",),
+    "dbh.01": ("V15.2",), "dbh.02": ("V13.2",), "dbh.03": ("V13.2",), "dbh.04": ("V13.2",), "dbh.05": ("V12.3",),
+    "dbh.06": ("V13.2",), "dbh.07": ("V13.2",), "dbh.08": ("V13.2", "V15.2"), "dbh.09": ("V8.2", "V14.2"),
+    "dbh.10": ("V8.4", "V8.2"), "dbh.11": ("V8.4",), "dbh.12": ("V8.4",), "dbh.13": ("V8.4",), "dbh.14": ("V13.2",),
+    "dbh.15": ("V8.4",), "dbh.16": ("V11.4",), "dbh.17": ("V15.2",), "dbh.18": ("V16.2", "V16.3"),
+    "dbh.22": ("V16.2",), "dbh.23": ("V1.2",),
 }
 
 
@@ -120,6 +125,8 @@ REQUIREMENT_EVIDENCE: list[tuple[str, str | None, tuple[str, ...]]] = [
     ("sec.09", r"algorithms", ("V9.1.2",)),
     ("sec.10", r"SQL|sql\.raw", ("V1.2.4",)),
     ("sec.10", r"Shell command", ("V1.2.5",)),
+    ("sec.10", r"mass assignment", ("V15.3.3",)),
+    ("sec.10", r"Hand-rolled SQL quote escaping", ("V1.2.4",)),
     ("sec.11", r"vulnerabilities in dependencies", ("V15.2.1",)),
     ("sec.12", None, ("V3.6.1",)),
     ("sec.13", r"HSTS|Strict-Transport-Security", ("V3.4.1",)),
@@ -143,6 +150,19 @@ REQUIREMENT_EVIDENCE: list[tuple[str, str | None, tuple[str, ...]]] = [
     ("dbo.03", r"disables SSL", ("V12.3.1",)),
     ("dbo.03", r"certificate verification", ("V12.3.2",)),
     ("dbo.04", None, ("V13.2.2",)),
+    ("dbh.01", None, ("V15.2.1",)),  # server or client tools behind the patched minor release
+    ("dbh.04", r"`trust`", ("V13.2.1",)),
+    ("dbh.05", r"ssl is off|not encrypted|unencrypted", ("V12.3.1",)),
+    ("dbh.06", r"App role|Superuser", ("V13.2.2",)),
+    ("dbh.09", None, ("V8.2.3",)),
+    ("dbh.10", r"does nothing|isn't forced", ("V8.4.1",)),
+    ("dbh.11", r"no WITH CHECK|allows every row", ("V8.4.1",)),
+    ("dbh.12", None, ("V8.4.1",)),
+    ("dbh.13", None, ("V8.4.1",)),
+    ("dbh.16", r"MD5", ("V11.4.2",)),
+    ("dbh.17", None, ("V15.2.2",)),
+    ("dbh.22", None, ("V16.2.5",)),
+    ("dbh.23", None, ("V1.2.4",)),
 ]
 
 

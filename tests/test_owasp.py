@@ -278,5 +278,21 @@ class RealCloneTests(unittest.TestCase):
         self.assertEqual(res.returncode, 0, res.stdout[-2000:] + res.stderr)
 
 
+class DatabaseSheetSearchTests(unittest.TestCase):
+    def test_db_terms_and_boosts(self):
+        sys.path.insert(0, str(PLUGIN_ROOT / "skills" / "owasp-security" / "scripts"))
+        import find_sheets
+        import tempfile
+        groups = find_sheets.query_terms("postgres rls")
+        self.assertTrue(any("row level security" in g for g in groups) and any("postgresql" in g for g in groups), groups)
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "package.json").write_text(json.dumps({"dependencies": {"drizzle-orm": "0.45.0", "postgres": "3.4.5"}}), encoding="utf-8")
+            self.assertLessEqual({"Database_Security", "Multi_Tenant_Security"}, find_sheets.stack_boosts(d))
+        sheets = {p.stem.replace("_Cheat_Sheet", "") for clone in REAL_CLONES if (clone / "cheatsheets").is_dir()
+                  for p in (clone / "cheatsheets").glob("*.md")}
+        if sheets:  # boosted names must be real sheets
+            self.assertLessEqual(set(find_sheets.STACK_BOOST["db"]), sheets)
+
+
 if __name__ == "__main__":
     unittest.main()

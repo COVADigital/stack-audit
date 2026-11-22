@@ -3,7 +3,8 @@
   "files": {
     "dbs": "20-schema-design.md",
     "dbm": "21-migration-safety.md",
-    "dbo": "22-database-operations.md"
+    "dbo": "22-database-operations.md",
+    "dbh": "23-postgres-hardening.md"
   },
   "rules": {
     "dbs": {
@@ -20,6 +21,19 @@
       "01": ["auto", "warn"], "02": ["auto", "info"], "03": ["heuristic", "warn", ["Database_Security", "Transport_Layer_Security"]],
       "04": ["heuristic", "info", ["Database_Security"]], "05": ["heuristic", "warn"], "06": ["heuristic", "info"],
       "07": ["manual", "info"]
+    },
+    "dbh": {
+      "01": ["live", "error", ["Vulnerable_Dependency_Management", "Database_Security"]], "02": ["live", "warn", ["Database_Security"]], "03": ["live", "warn", ["Database_Security"]],
+      "04": ["live", "error", ["Database_Security"]], "05": ["live", "warn", ["Database_Security", "Transport_Layer_Security"]],
+      "06": ["live", "error", ["Database_Security"]], "07": ["auto", "warn", ["Database_Security"]], "08": ["auto", "warn", ["Database_Security"]],
+      "09": ["live", "info", ["Database_Security", "Cryptographic_Storage"]], "10": ["heuristic", "warn", ["Multi_Tenant_Security", "Authorization"]],
+      "11": ["auto", "warn", ["Multi_Tenant_Security"]], "12": ["heuristic", "error", ["Multi_Tenant_Security"]],
+      "13": ["heuristic", "warn", ["Multi_Tenant_Security"]], "14": ["auto", "error", ["Database_Security"]],
+      "15": ["live", "info", ["Multi_Tenant_Security"]], "16": ["live", "warn", ["Password_Storage", "Database_Security"]],
+      "17": ["live", "warn", ["Database_Security"]], "18": ["live", "info", ["Logging"]],
+      "19": ["manual", "info", ["Cryptographic_Storage", "Secrets_Management"]], "20": ["manual", "info", ["Database_Security"]],
+      "21": ["manual", "info", ["Database_Security"]], "22": ["heuristic", "warn", ["Logging", "Database_Security"]],
+      "23": ["heuristic", "error", ["SQL_Injection_Prevention", "Database_Security"]]
     }
   }
 }

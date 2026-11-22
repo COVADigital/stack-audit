@@ -37,6 +37,16 @@ class NetworkingAudit(Audit):
                          f, m.start(), fix_hint="if (!res.ok) throw new HttpError(res.status, …); then validate the body with a schema")
         for m in re.finditer(r"fetch\s*\([^;]*?\)\s*\.then\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*\1\.json\(\)", f.code_nostr):
             self.add("net.17", "fetch().then(r => r.json()) without checking r.ok", f, m.start())
+        if f.directive != "client":
+            for m in re.finditer(r"catch\s*\(\s*(\w+)[^)]*\)\s*\{", f.code):
+                var, block = m.group(1), f.code[m.end(): m.end() + 600].split("catch", 1)[0]
+                leak = re.search(rf"(?:Response|NextResponse)\.json\s*\([^;]*\b{var}\b(?:\.(?:message|detail|hint|stack|cause))?"
+                                 rf"|return\s*\{{[^;}}]*\b{var}\.(?:message|detail|hint|stack)", block)
+                if leak and not re.search(r"console\.|logger\.|log\(|captureException", block[: leak.start()] + "x") or \
+                        leak and re.search(rf"\b{var}\b(?:\.(?:message|detail|hint|stack|cause))?\s*[,}})]", leak.group(0)):
+                    self.add("net.17", f"Raw error `{var}` returned to the client: database errors reveal tables, columns and SQL "
+                                       "(error-based injection)", f, m.end() + leak.start(), severity="warn", confidence="medium",
+                             fix_hint="Log the error server-side; return a generic message and an error id")
 
     def effects(self, f: JsFile) -> None:
         for off, args in find_calls(f, r"\buseEffect", nostr=False):

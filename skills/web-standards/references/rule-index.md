@@ -7,7 +7,7 @@
 - **auto**: deterministic static check
 - **heuristic**: static check that can produce false positives; open the file and confirm before reporting
 - **build output**: needs build output
-- **live URL / remote / host**: needs a live target (`--url`, `--remote`, a running daemon, or the server)
+- **live URL / remote / host**: needs a live target (`--url`, `--remote`, a running daemon, the server, or a `--snapshot` of it)
 - **delegated tool**: hand off to another tool
 - **manual**: needs judgment; listed under "not checked" in reports
 

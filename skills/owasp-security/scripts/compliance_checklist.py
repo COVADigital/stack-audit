@@ -38,7 +38,7 @@ WEB = PLUGIN / "skills" / "web-standards"
 CONTAINER = PLUGIN / "skills" / "container-standards"
 DATA = PLUGIN / "skills" / "data-standards"
 CONTAINER_PREFIXES = ["img", "run", "cnet", "csec", "sup", "ops", "cool"]
-DATA_PREFIXES = ["dbs", "dbm", "dbo"]
+DATA_PREFIXES = ["dbs", "dbm", "dbo", "dbh"]
 ORDER = {"not met": 0, "partial": 1, "not assessed": 2}
 DISCLAIMER = ("This is a self-assessment against OWASP ASVS 5.0. It is not an audit, certification, "
               "or attestation of compliance.")

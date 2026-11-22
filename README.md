@@ -15,7 +15,7 @@ It gives your coding agent four skills, each with written standards, audit scrip
 | Skill | Covers | Use it for |
 |---|---|---|
 | `web-standards` | React / Next.js: rendering, performance, state, networking, caching, architecture, security, accessibility and i18n, git hygiene. 179 rules, tuned for Next.js 16 and React 19. | Reviewing a file or PR, planning a page's rendering and caching, a pre-launch audit |
-| `data-standards` | Postgres with Drizzle: schema design, migration safety (Drizzle Kit, Prisma and plain SQL migrations), push vs migrate, connections, roles, SSL, seeds. 25 rules. | Reviewing a schema or a migration before it runs, a database check before release |
+| `data-standards` | Postgres with Drizzle: schema design, migration safety (Drizzle Kit, Prisma and plain SQL migrations), push vs migrate, connections, roles, SSL, seeds, and PostgreSQL security hardening (patch level, pg_hba, TLS, roles and grants, row level security, views, functions, timeouts, logging) with an optional read-only snapshot of a live server. 48 rules. | Reviewing a schema or a migration before it runs, hardening a Postgres server, a database check before release |
 | `container-standards` | Dockerfiles, Compose stacks, networks, published ports, secrets, volumes, Docker hosts, Coolify (with optional live checks of a Coolify server). 59 rules. | Reviewing a Dockerfile or Compose file, hardening a stack before deploy |
 | `owasp-security` | The OWASP Cheat Sheet Series, ASVS 5.0 and the OWASP Top 10, from a local copy. | "What does OWASP recommend for X", citations for a security doc, an ASVS self-assessment |
 
@@ -27,6 +27,7 @@ You don't need to name a skill. Ask normally and the agent loads the right one:
 review src/app/checkout/page.tsx before I open a PR
 is compose.prod.yaml safe to deploy? read-only, don't change anything
 is drizzle/0007_add_billing.sql safe to run on production?
+harden our postgres: we store personal data for several tenants
 what does OWASP recommend for password reset flows? I need the cheat sheet section
 how do we stand against ASVS level 2? give me the gaps
 audit this repo before launch: security, accessibility and the Docker setup
@@ -194,8 +195,11 @@ python scripts/stack_profile.py --root path/to/app
 python skills/web-standards/scripts/run_audit.py --root path/to/app --phase review
 python skills/web-standards/scripts/run_audit.py --root path/to/app --domain sec,a11y
 
-# Database: Drizzle schema, SQL migrations, push/migrate, connections (never connects to a database)
+# Database: Drizzle schema, SQL migrations, push/migrate, connections, Postgres hardening (never connects to a database)
 python skills/data-standards/scripts/run_audit.py --root path/to/app
+# Live server state: run the read-only snapshot with psql, then pass it in
+psql -X -d "$DATABASE_URL" -f skills/data-standards/assets/pg_snapshot.sql -o /tmp/pg-snapshot.jsonl
+python skills/data-standards/scripts/run_audit.py --root path/to/app --pg-snapshot /tmp/pg-snapshot.jsonl --app-role app_user
 
 # Dockerfiles and Compose files
 python skills/container-standards/scripts/run_audit.py --root path/to/repo --phase build

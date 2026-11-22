@@ -14,7 +14,7 @@ MAX_AGE_DAYS = 30
 CONTEXT = """The stack-audit plugin is installed. Load the matching skill BEFORE reading files or answering, even for a single-file question you could answer from memory:
 - stack-audit:web-standards: reviewing, auditing, debugging or changing React / Next.js code (components, pages, data fetching, caching, Server Actions, auth, sessions, headers, accessibility).
 - stack-audit:container-standards: reviewing or changing a Dockerfile, a Compose file, a container image, published ports, container secrets, a Docker host or a Coolify server.
-- stack-audit:data-standards: writing or reviewing a Drizzle schema or a database migration (Drizzle Kit, Prisma, SQL), drizzle-kit push vs migrate, database connections, roles, SSL or seed scripts.
+- stack-audit:data-standards: writing or reviewing a Drizzle schema or a database migration (Drizzle Kit, Prisma, SQL), drizzle-kit push vs migrate, database connections, roles, SSL or seed scripts, or hardening/auditing a PostgreSQL server (patch level, pg_hba, grants, row level security, policies, views, functions).
 - stack-audit:owasp-security: what OWASP, ASVS or the OWASP Top 10 says, or security advice that needs citations.
 Do not load them for unrelated work.
 Plugin root: {root}. Skill commands write it as ${{CLAUDE_PLUGIN_ROOT}}; if your client does not fill that in (Codex), use this path."""

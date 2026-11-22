@@ -166,7 +166,12 @@ const data = Signup.parse(await req.json());   // server-side, always
 await db.execute(sql`SELECT * FROM users WHERE email = ${data.email}`);
 // ❌ never sql.raw(userInput) or string concatenation
 ```
-**Rule:** Client-side validation is for user experience and server-side validation is for security, so do both. Use parameterized queries and never concatenate strings.
+Three injections hide behind "it's parameterized":
+- **Identifiers** (`ORDER BY`, column or table names) can't be parameters. Map them through an allow-list, never `sql.identifier(input)` or `sql.raw(input)`.
+- **Mass assignment:** `db.insert(t).values(await req.json())` lets a client set `tenantId`, `role` or `isAdmin`. Parse into a schema that lists only the writable fields, then add server-owned fields yourself.
+- **LIKE wildcards:** `%` and `_` in input turn a search into a match-everything scan. Escape them and cap the length.
+
+**Rule:** Client-side validation is for user experience and server-side validation is for security, so do both. Use parameterized queries and never concatenate strings. Allow-list identifiers, write only the fields a schema permits, and escape LIKE patterns.
 
 ---
 

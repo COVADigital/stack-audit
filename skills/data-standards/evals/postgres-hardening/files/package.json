@@ -1,0 +1,1 @@
+{ "name": "tenant-app", "private": true, "dependencies": { "drizzle-orm": "0.45.0", "postgres": "3.4.5", "next": "16.0.0" }, "devDependencies": { "drizzle-kit": "0.31.0" } }

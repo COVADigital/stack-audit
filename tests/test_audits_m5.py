@@ -178,11 +178,17 @@ items.forEach(async (i) => { await save(i); });
         self.write("app/api/ok/route.ts", "export async function POST(req: Request) { const b = Item.parse(await req.json()); return Response.json(b); }")
         self.write("app/actions/a.ts", "'use server';\nexport async function rename(id: string, name: string) { await db.update(t).set({ name }); }\nexport async function safe(input: unknown) { await service.do(input); }\n")
         self.write("scripts/tool.mjs", "await fetch('http://localhost')\n")
+        self.write("app/api/leak/route.ts", "export async function POST() {\n  try { await db.insert(t).values({}); }\n"
+                                            "  catch (err) { return Response.json({ error: err.message }, { status: 500 }); }\n}\n")
+        self.write("app/api/quiet/route.ts", "export async function POST() {\n  try { await db.insert(t).values({}); }\n"
+                                             "  catch (err) { logger.error(err); return Response.json({ error: 'Something went wrong' }, { status: 500 }); }\n}\n")
         d = self.run_audit()
         self.assertIn("net.11", self.rules(d, "c.tsx"))
         self.assertEqual(len([f for f in d["findings"] if f["rule"] == "net.11"]), 1)  # beacon not flagged
         self.assertIn("net.17", self.rules(d, "api.ts"))
         self.assertEqual(len([m for m in self.msgs(d, "net.17") if "res.json" in m]), 1)
+        self.assertIn("net.17", self.rules(d, "leak/route.ts"))
+        self.assertNotIn("net.17", self.rules(d, "quiet/route.ts"))
         self.assertEqual(len(self.msgs(d, "net.12")), 2)
         self.assertIn("net.19", self.rules(d, "items/route.ts"))
         self.assertNotIn("net.19", self.rules(d, "ok/route.ts"))

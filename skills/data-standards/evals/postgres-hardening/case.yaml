@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: postgres-hardening
+expected_outcome: |
+  Reads the existing snapshot (no new database connection) and the repo, and reports at least: PostgreSQL 16.9 is missing
+  the 2026-11-12 security fixes (upgrade to 16.16+), the app role is a superuser that owns tables, pg_hba has a `trust`
+  line open to 0.0.0.0/0, the app sets the tenant with a session-level SET that leaks across pooled connections, and a view
+  bypasses RLS. Gives a staged, non-breaking remediation plan (patch and logging first, roles and revokes in staging,
+  hostssl/scram after checking sessions, RLS per table) with rollback steps, and applies nothing.
+context:
+  scaffold_script: place-files.sh

@@ -11,7 +11,7 @@ import unittest
 
 from helpers import PLUGIN_ROOT
 
-RID = r"(?:git|ren|perf|state|net|cache|arch|sec|a11y|img|run|cnet|csec|host|sup|ops|cool|dbs|dbm|dbo)\.\d{2}"
+RID = r"(?:git|ren|perf|state|net|cache|arch|sec|a11y|img|run|cnet|csec|host|sup|ops|cool|dbs|dbm|dbo|dbh)\.\d{2}"
 
 # Labelled auto because another rule's check covers them; the report says which.
 CROSS_REF = {"net.14": "sec.04", "cache.05": "sec.07"}

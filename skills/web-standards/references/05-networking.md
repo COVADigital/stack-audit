@@ -300,7 +300,9 @@ async function api<T>(url: string, schema: z.ZodType<T>, init?: RequestInit): Pr
   return schema.parse(await res.json()); // validate shape
 }
 ```
-**Rule:** `fetch` does not throw on 4xx or 5xx, so always check `res.ok`. Validate responses with Zod, and log errors to Sentry. (Next.js `fetch` extensions such as `next: { tags }` apply only on the server, and only in the legacy caching model.)
+Never return a caught error object, or its `message` / `detail` / `hint`, to the client. Postgres errors name tables, columns, constraints and sometimes values, and error-based SQL injection reads data back through exactly those messages.
+
+**Rule:** Server code returns generic error messages, with details logged server-side. `fetch` does not throw on 4xx or 5xx, so always check `res.ok`. Validate responses with Zod, and log errors to Sentry. (Next.js `fetch` extensions such as `next: { tags }` apply only on the server, and only in the legacy caching model.)
 
 ---
 

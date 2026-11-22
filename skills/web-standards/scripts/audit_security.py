@@ -227,6 +227,32 @@ class SecurityAudit:
         for m in re.finditer(r"(['\"])\s*(SELECT|INSERT|UPDATE|DELETE)\b[^'\"]*\1\s*\+", f.code, re.I):
             self.add("sec.10", "SQL built with string concatenation", f, m.start(), confidence="medium",
                      fix_hint="Use parameterized queries")
+        for off, args in find_calls(f, r"\bsql\.identifier", nostr=False):
+            if not re.fullmatch(r"\s*(['\"])[^'\"]*\1\s*", args):
+                self.add("sec.10", "SQL identifier from a variable (sql.identifier): any column or table name can be injected", f, off,
+                         confidence="medium", fix_hint="Map the input to an allow-list of known columns: const col = { name: users.name }[key]")
+        raw_body = {m.group(1) for m in re.finditer(r"\b(?:const|let|var)\s+(\w+)\s*=\s*await\s+(?:req|request)\.json\(\)", f.code)}
+        raw_body -= {v for v in raw_body if re.search(rf"\.(?:parse|safeParse|parseAsync|safeParseAsync)\(\s*{v}\b", f.code)}
+        sources = r"await\s+(?:req|request)\.json\(\)|(?:req|request)\.body\b|Object\.fromEntries\(\s*(?:await\s+)?\w*[fF]orm[dD]ata"
+        if raw_body:
+            sources += "|" + "|".join(rf"{re.escape(v)}\b(?!\.)" for v in raw_body)
+        for m in re.finditer(rf"\.(?:values|set)\s*\(\s*\{{?\s*(?:\.\.\.)?\s*(?:{sources})", f.code):
+            self.add("sec.10", "Request data written straight into insert/update (mass assignment): a client can set tenant_id, role or any column",
+                     f, m.start(), severity="warn", confidence="medium",
+                     fix_hint="Parse with a schema that lists only the writable fields, then set server-owned fields (tenantId, userId) yourself")
+        for m in re.finditer(r"\b(?:i?like|notI?like)\s*\([^,()]+,\s*`%?\$\{[^`]*`", f.code, re.I):
+            self.add("sec.10", "LIKE pattern built from input without escaping % and _ (wildcard injection: match-everything scans)",
+                     f, m.start(), severity="info", confidence="medium",
+                     fix_hint="Escape first: q.replace(/[\\\\%_]/g, '\\\\$&'), and cap the length")
+        for m in re.finditer(r"\.replace(?:All)?\s*\(\s*(?:/'/g|\"'\"|`'`)\s*,\s*(?:\"''\"|`''`|'\\\\''|\"\\\\'\")", f.code):
+            if re.search(r"\b(select|insert|update|delete|where)\b", f.code[max(0, m.start() - 400): m.end() + 400], re.I):
+                self.add("sec.10", "Hand-rolled SQL quote escaping: bypassable (dollar quoting, CHR(), backslashes) and still SQL built from input",
+                         f, m.start(), confidence="medium", fix_hint="Delete the escaping and pass the value as a parameter (sql`… ${value}`)")
+        for off, args in find_calls(f, r"\.limit", nostr=False):
+            if re.search(r"searchParams|\.get\(|\b(?:req|request)\.(?:query|body)|\bparams\.|\bbody\.", args) and not re.search(r"Math\.min|clamp", args):
+                self.add("sec.10", "LIMIT taken from the request without a cap: one request can page out a whole table",
+                         f, off, severity="info", confidence="medium",
+                         fix_hint="Validate it with the schema: z.coerce.number().int().min(1).max(100).default(20)")
         for m in re.finditer(r"\b(?:exec|execSync|spawn)\s*\(\s*`[^`]*\$\{", f.code):
             self.add("sec.10", "Shell command built with template interpolation (command injection)", f, m.start(),
                      confidence="medium", fix_hint="Use execFile/spawn with an argument array and validated input")

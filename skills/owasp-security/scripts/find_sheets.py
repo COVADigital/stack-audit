@@ -50,12 +50,19 @@ SYNONYMS = {
     "k8s": ["kubernetes"],
     "pkce": ["pkce", "proof key"],
     "hsts": ["strict transport security", "hsts"],
+    "rls": ["row level security", "row-level security", "multi-tenant", "tenant isolation"],
+    "tenant": ["tenant", "multi-tenant"],
+    "postgres": ["postgres", "postgresql", "database"],
+    "postgresql": ["postgres", "postgresql", "database"],
+    "pii": ["personal data", "sensitive data", "pii"],
 }
 STACK_BOOST = {
     "next": ["Nextjs_Security", "Nodejs_Security", "NPM_Security", "JavaScript_and_TypeScript_Security", "React_Security"],
     "docker": ["Docker_Security", "NodeJS_Docker"],
     "ci": ["GitHub_Actions_Security", "CI_CD_Security"],
+    "db": ["Database_Security", "SQL_Injection_Prevention", "Query_Parameterization", "Multi_Tenant_Security"],
 }
+DB_PACKAGES = ("drizzle-orm", "@prisma/client", "prisma", "pg", "postgres", "@neondatabase/serverless", "kysely")
 
 
 def query_terms(query: str) -> list[list[str]]:
@@ -86,6 +93,8 @@ def stack_boosts(root: str | None) -> set[str]:
         boosted |= set(STACK_BOOST["docker"])
     if p.ci["github_actions"]:
         boosted |= set(STACK_BOOST["ci"])
+    if any(p.has(pkg) for pkg in DB_PACKAGES):
+        boosted |= set(STACK_BOOST["db"])
     return boosted
 
 

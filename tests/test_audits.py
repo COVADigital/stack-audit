@@ -134,9 +134,40 @@ await prisma.$executeRawUnsafe(`DELETE FROM t WHERE id = ${id}`);
 await db.execute(sql`SELECT * FROM users WHERE email = ${email}`);
 await db.select().from(users).where(eq(users.email, email));
 """)
+        self.write("app/api/users/route.ts", """
+export async function POST(req: Request) {
+  await db.insert(users).values(await req.json());
+  const body = await req.json();
+  await db.update(users).set({ ...body, updatedAt: new Date() }).where(eq(users.id, id));
+  const rows = await db.select().from(users).where(ilike(users.name, `%${q}%`));
+  return db.select().from(users).orderBy(sql.identifier(sortKey));
+}""")
+        self.write("app/api/ok/route.ts", """
+export async function POST(req: Request) {
+  const body = await req.json();
+  const data = Input.parse(body);
+  await db.insert(users).values({ ...data, tenantId: session.tenantId });
+  return db.select().from(users).orderBy(sql.identifier('created_at'));
+}""")
         d = self.run_audit()
-        self.assertEqual(len(self.messages(d, "sec.10")), 6)
+        self.assertEqual(len(self.messages(d, "sec.10")), 10)   # 6 in lib/bad.ts + 4 in api/users/route.ts
+        self.write("lib/escape.ts", """
+const safe = name.replace(/'/g, "''");
+await client.query("SELECT * FROM users WHERE name = '" + safe + "'");
+export async function GET(req) {
+  const p = new URL(req.url).searchParams;
+  const all = await db.select().from(users).limit(Number(p.get('limit')));
+  const ok = await db.select().from(users).limit(Math.min(Number(p.get('limit')), 100));
+}""")
+        msgs = [f["message"] for f in self.run_audit()["findings"] if f["rule"] == "sec.10" and f["file"] == "lib/escape.ts"]
+        self.assertEqual(sum("Hand-rolled SQL quote escaping" in m for m in msgs), 1)
+        self.assertEqual(sum("LIMIT taken from the request" in m for m in msgs), 1)
         self.assertNotIn("sec.10", self.rules_in(d, "good.ts"))
+        self.assertNotIn("sec.10", self.rules_in(d, "ok/route.ts"))
+        api = [f["message"] for f in d["findings"] if f["rule"] == "sec.10" and f["file"].endswith("users/route.ts")]
+        self.assertEqual(sum("mass assignment" in m for m in api), 2)
+        self.assertEqual(sum("LIKE pattern" in m for m in api), 1)
+        self.assertEqual(sum("SQL identifier from a variable" in m for m in api), 1)
 
     def test_ssrf(self):
         self.write("app/api/proxy/route.ts", """

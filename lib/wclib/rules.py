@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .findings import Finding
 
-CHECK_NOT_RUN = {"manual": "needs judgment", "live": "needs --url/--remote", "build": "needs --build",
+CHECK_NOT_RUN = {"manual": "needs judgment", "live": "needs a live target: --url, --remote or --snapshot", "build": "needs --build",
                  "tool": "delegated to another tool"}
 
 
