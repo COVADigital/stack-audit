@@ -33,15 +33,9 @@ The `owasp-security` tests and scripts need a local clone of the OWASP Cheat She
 
 ## Running evals
 
-Each skill keeps its eval cases in `skills/<skill>/evals/<case>/`: a `prompt.md`, `graders/*.md`, a `case.yaml` and the fixture files. `claude plugin eval` runs them on your own account, so **every run is billed**. Start with one case and one run, and set a cost cap.
-
-`claude plugin eval` won't read eval cases inside `skills/`, so run them from a copy with the case moved to a top-level `evals/` folder:
+Eval cases are in `evals/<case>/`: a `prompt.md`, `graders/*.md`, a `case.yaml` and the fixture files. `claude plugin eval` runs them on your own account, so **every run is billed**. Start with one case and one run, and set a cost cap. From the repo root:
 
 ```sh
-mkdir -p /tmp/stack-audit-eval/evals
-git archive HEAD | tar -x -C /tmp/stack-audit-eval
-mv /tmp/stack-audit-eval/skills/data-standards/evals/postgres-hardening /tmp/stack-audit-eval/evals/
-cd /tmp/stack-audit-eval
 claude plugin eval . --case postgres-hardening --scaffold --allow-tools "Bash(python:*)" \
   --runs 1 --ablation none --max-cost-usd 5 --no-publish --output-dir ~/eval-out
 ```
@@ -65,7 +59,7 @@ On Windows, `claude plugin eval` refuses to give the agent a shell, because Clau
    claude -p "say ok"
    ```
 4. Check the sandbox: `bwrap --ro-bind / / true && echo "sandbox OK"`.
-5. Work from the Linux filesystem (`~`), not `/mnt/c`, and run the commands above.
+5. Work from a clone on the Linux filesystem (`git clone` into `~`), not from `/mnt/c` or `/mnt/e`, and run the command above there.
 
 The eval also checks for places where credentials could leak into the sandbox, and refuses to run if it finds any. Two of these checks fail on a typical WSL machine:
 

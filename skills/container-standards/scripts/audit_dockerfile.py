@@ -97,7 +97,8 @@ class DockerfileAudit(Audit):
                     [ins.body.split("=", 1)[0].strip()]
                 for n in names:
                     if is_secret_name(n):
-                        add("csec.04", f"{ins.cmd} `{n}` looks like a secret: it persists in the image history", ins.line,
+                        add("csec.04", f"{ins.cmd} `{n}` looks like a secret: it persists in that stage's history and build cache, "
+                            "and in the image if it's the final stage (or the final stage builds FROM it)", ins.line,
                             fix_hint="Use RUN --mount=type=secret at build time; inject runtime secrets via the environment")
                     if ins.cmd == "ARG" and n.startswith("NEXT_PUBLIC_"):
                         add("img.11", f"ARG `{n}` is baked into the client bundle at build time (one image per environment)",

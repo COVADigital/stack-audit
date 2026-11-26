@@ -3,3 +3,5 @@ name: webhook-guidance-with-citations
 expected_outcome: |
   Summarizes OWASP webhook guidance (signature verification over the raw body, timestamp / replay protection, secret handling)
   with citations to the Webhook Security cheat sheet using URLs and anchors obtained from the skill's scripts.
+  If the OWASP clone is not installed, says so, offers the `git clone` without running it, and gives no OWASP claims or
+  links from memory. Note: `claude plugin eval` runs in an isolated home, so it exercises the not-installed path.

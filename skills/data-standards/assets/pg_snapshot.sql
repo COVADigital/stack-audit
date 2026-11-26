@@ -78,20 +78,25 @@ SELECT jsonb_build_object('section', 'roles', 'rows', coalesce(jsonb_agg(t), '[]
          (SELECT jsonb_agg(c) FROM unnest(r.rolconfig) c
            WHERE c ~ '^(statement_timeout|lock_timeout|idle_in_transaction_session_timeout|idle_session_timeout|search_path)=') AS config,
          (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-           WHERE c.relowner = r.oid AND c.relkind IN ('r', 'p') AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema') AS owned_tables
+           WHERE c.relowner = r.oid AND c.relkind IN ('r', 'p') AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+             AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e')) AS owned_tables
   FROM pg_roles r WHERE r.rolname !~ '^pg_'
 ) t;
 
 -- Every role membership of non-predefined roles (names only). The audit follows them transitively: an app role that is a
 -- member of the table owner or a superuser can SET ROLE to it (dbh.06), and inherits TEMP/CREATE and predefined roles
--- such as pg_read_server_files (dbh.02, dbh.08). DISTINCT: PostgreSQL 16+ keeps one row per grantor. A 16+ grant with
+-- such as pg_read_server_files (dbh.02, dbh.08). GROUP BY: PostgreSQL 16+ keeps one row per grantor. A 16+ grant with
 -- INHERIT, SET and ADMIN all false confers nothing (used for pg_hba group matching); to_jsonb keeps this valid on 15.
+-- admin_only: every grant is ADMIN without INHERIT or SET. The member can't SET ROLE yet, but it can grant itself SET.
 SELECT jsonb_build_object('section', 'memberships', 'rows', coalesce(jsonb_agg(t), '[]'::jsonb)) FROM (
-  SELECT DISTINCT r.rolname AS role, g.rolname AS granted
+  SELECT r.rolname AS role, g.rolname AS granted,
+         bool_and(NOT coalesce((to_jsonb(am) ->> 'inherit_option')::boolean, true)
+                  AND NOT coalesce((to_jsonb(am) ->> 'set_option')::boolean, true)) AS admin_only
   FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.member JOIN pg_roles g ON g.oid = am.roleid
   WHERE r.rolname !~ '^pg_'
     AND (am.admin_option OR coalesce((to_jsonb(am) ->> 'inherit_option')::boolean, true)
          OR coalesce((to_jsonb(am) ->> 'set_option')::boolean, true))
+  GROUP BY 1, 2
 ) t;
 
 -- GRANT SET / ALTER SYSTEM ON PARAMETER (PostgreSQL 15+): ALTER SYSTEM on archive_command or shared_preload_libraries
@@ -105,7 +110,8 @@ SELECT jsonb_build_object('section', 'parameter_grants', 'rows', coalesce(jsonb_
 
 -- EXECUTE on server file / large-object / admin functions granted beyond their owner (default: superuser only): dbh.08.
 SELECT jsonb_build_object('section', 'function_grants', 'rows', coalesce(jsonb_agg(DISTINCT t), '[]'::jsonb)) FROM (
-  SELECT p.proname AS name, CASE WHEN g.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(g.grantee) END AS grantee
+  SELECT p.proname AS name, p.oid::regprocedure::text AS signature,
+         CASE WHEN g.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(g.grantee) END AS grantee
   FROM pg_proc p CROSS JOIN LATERAL aclexplode(p.proacl) g
   WHERE p.pronamespace = 'pg_catalog'::regnamespace AND p.proacl IS NOT NULL AND g.privilege_type = 'EXECUTE'
     AND p.proname IN ('pg_read_file', 'pg_read_binary_file', 'pg_ls_dir', 'pg_stat_file', 'lo_import', 'lo_export',
@@ -214,6 +220,15 @@ SELECT jsonb_build_object('section', 'native_functions', 'rows', coalesce(jsonb_
   WHERE (l.lanname = 'c' OR (l.lanispl AND NOT l.lanpltrusted))
     AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
     AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')
+) t;
+
+-- Event triggers outside extensions (dbh.08): their function runs on every matching DDL command, or every login (17+),
+-- including a superuser's, so one nobody created is a persistence sign. Names only, never the function source.
+SELECT jsonb_build_object('section', 'event_triggers', 'rows', coalesce(jsonb_agg(t), '[]'::jsonb)) FROM (
+  SELECT e.evtname AS name, e.evtevent AS event, pg_get_userbyid(e.evtowner) AS owner, e.evtenabled <> 'D' AS enabled,
+         e.evtfoid::regprocedure::text AS function
+  FROM pg_event_trigger e
+  WHERE NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_event_trigger'::regclass AND d.objid = e.oid AND d.deptype = 'e')
 ) t;
 
 SELECT jsonb_build_object('section', 'large_objects', 'rows', jsonb_build_array(jsonb_build_object(

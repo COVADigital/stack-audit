@@ -6,7 +6,7 @@ allowed-tools: Bash(python ${CLAUDE_PLUGIN_ROOT}/skills/container-standards/scri
 
 # Container Standards
 
-> **Codex and other agents:** `${CLAUDE_PLUGIN_ROOT}` in the commands below is the plugin root, two folders above this SKILL.md (the session-start hook also prints it as "Plugin root"). Claude Code fills it in; elsewhere, substitute the absolute path.
+> **Codex and other agents:** `${CLAUDE_PLUGIN_ROOT}` in the commands below is the plugin root, two folders above this SKILL.md (the session-start hook also prints it as "Plugin root"). Claude Code fills it in; elsewhere, substitute the absolute path. `<scratchpad>` is Claude Code's session scratchpad; elsewhere, use a temporary folder outside the repository (for example `$TMPDIR/stack-audit`).
 
 Every **Rule** in `references/` is a requirement. Findings cite rule IDs such as `cnet.02` (section 02 of `12-network-exposure.md`). `references/rule-index.md` lists all 59 rules and how each one is checked.
 
@@ -61,7 +61,7 @@ Not everyone runs Coolify, so live Coolify checks are opt-in. When Coolify comes
 
 - **Strictly read-only.** Use only the read tools in the recipe. Never call `control`, `deploy`, `rollback_application`, `create_*`, `manage_*`, `docker_cleanup`, `get_env_values` or `get_logs` for an audit.
 - **Token handling.** Recommend the hidden `set-token` prompt in the user's own terminal. If they choose to paste the token in the chat, warn that it enters the transcript, pass it to `set-token` on stdin only, and never repeat or store it elsewhere. Client configs hold only the `COOLIFY_TOKEN` variable name.
-- **Ask which projects to audit** (multi-select) before reading any resource, and keep the snapshot in the session scratchpad, never in a repository.
+- **Ask which projects to audit** (multi-select) before reading any resource, and keep the snapshot in `<scratchpad>`, never in a repository.
 
 ## 5. Checks worth keeping
 

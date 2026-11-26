@@ -53,7 +53,7 @@ RUN --mount=type=secret,id=npm_token,env=NPM_TOKEN npm ci
 
 ## 04. No Secrets in ARG or ENV
 **What:** `ARG API_KEY`, `ENV DATABASE_PASSWORD=…` in a Dockerfile.
-**Why:** Both persist in the image (`docker history`, `docker inspect`) for anyone who can pull it (DL3064).
+**Why:** Both persist in that stage's history and build cache (DL3064). In the final stage, or a stage it builds `FROM`, they ship in the image (`docker history`, `docker inspect`) for anyone who can pull it. In an earlier stage, they still leak if the cache is exported, that stage is pushed, or build records (provenance) include build args.
 
 **Rule:** No secret-like names in `ARG` or `ENV`. Runtime secrets arrive through the container environment or `/run/secrets` when the container starts.
 

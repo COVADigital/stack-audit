@@ -130,7 +130,7 @@ Never call `control`, `deploy`, `cancel_deployment`, `rollback_application`, any
    - service: `get_service`, `list_service_applications` + `get_service_application`, `list_service_databases` + `get_service_database`, `list_env_keys`, `list_storages`;
    - standalone database: `get_database`, `list_env_keys`, `list_storages`, `list_database_backups`, and for each schedule the first page of `list_backup_executions`, newest first.
 4. `get_vulnerabilities` with `action: list`, and copy each resource's `security` object onto it.
-5. Write the snapshot to the session scratchpad (never into a repository) and run `scripts/audit_coolify.py --snapshot <file>`.
+5. Write the snapshot to `<scratchpad>` (Claude Code's session scratchpad; elsewhere, a temporary folder outside the repository) and run `scripts/audit_coolify.py --snapshot <file>`.
 
 Snapshot shape (`snapshot_version` 1):
 

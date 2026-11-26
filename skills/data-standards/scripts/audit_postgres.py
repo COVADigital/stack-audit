@@ -496,6 +496,9 @@ class PostgresAudit(Audit):
                                ("policies", "dbh.11 policies"), ("roles", "dbh.06/dbh.17 roles"), ("settings", "settings")):
             if section not in snap:
                 self.report.not_checked.append(f"Snapshot has no `{section}` section (the role can't read it?): {rules} not checked")
+        if "event_triggers" not in snap:   # every role can read pg_event_trigger, so a missing section means an older pg_snapshot.sql
+            self.report.not_checked.append("dbh.08 event triggers: the snapshot was taken with a pg_snapshot.sql older than 0.7.2; "
+                                           "run the current one to check them")
         roles = {r["role"]: r for r in snap.get("roles", [])}
         bootstrap = meta.get("bootstrap_superuser")
         self.app_roles = set(self.args.app_role)
@@ -506,8 +509,11 @@ class PostgresAudit(Audit):
             if self.app_roles:
                 self.report.skipped.append(f"App role inferred as {', '.join(sorted(self.app_roles))}: pass --app-role to pin it")
         edges: dict[str, set[str]] = {}
+        self.admin_only: set[tuple[str, str]] = set()   # ADMIN-only grants still escalate: the member can grant itself SET
         for m in snap.get("memberships", []):
             edges.setdefault(m.get("role"), set()).add(m.get("granted"))
+            if m.get("admin_only"):
+                self.admin_only.add((m.get("role"), m.get("granted")))
         self.via: dict[str, str] = {}   # role an app role is a member of (transitively) -> that app role
         for a in sorted(self.app_roles):
             for g in closure(edges, a) - self.app_roles:
@@ -648,7 +654,9 @@ class PostgresAudit(Audit):
                                     ("CREATEROLE", gr.get("createrole")),
                                     (f"owns {gr.get('owned_tables')} table(s)", int(gr.get("owned_tables") or 0))) if hit]
             if why:
-                self.flag("dbh.06", f"App role `{a}` is a member of `{g}` ({', '.join(why)}): it can SET ROLE {g} and act with those "
+                how = (f"it holds only ADMIN OPTION, but it can grant itself SET and then SET ROLE {g}" if (a, g) in self.admin_only
+                       else f"it can SET ROLE {g}")
+                self.flag("dbh.06", f"App role `{a}` is a member of `{g}` ({', '.join(why)}): {how} and act with those "
                                     "rights (bypass RLS, ALTER or DROP tables)", severity="error", fix_hint=f"REVOKE {g} FROM {a}")
         su = {n for n, r in roles.items() if r.get("superuser")}
         by_su: dict[str, int] = {}
@@ -681,6 +689,11 @@ class PostgresAudit(Audit):
             self.flag("dbh.08", f"Function `{f['schema']}.{f['name']}` is written in `{f['language']}` and isn't part of an extension: "
                                 "check who created it (sqlmap-style `sys_eval` backdoors look like this)", severity="error",
                       fix_hint="If nobody can account for it, treat the server as compromised: isolate it, rotate credentials, restore from a clean backup")
+        for e in snap.get("event_triggers", []):
+            self.flag("dbh.08", f"Event trigger `{e['name']}` (owner `{e.get('owner')}`) runs `{e.get('function')}` on every `{e.get('event')}`"
+                                f"{'' if e.get('enabled', True) else ' (disabled)'}, including a superuser's, and isn't part of an extension: "
+                                "check who created it", severity="warn" if e.get("enabled", True) else "info",
+                      fix_hint=f"If nobody can account for it: DROP EVENT TRIGGER {e['name']}, review the function, and treat the server as possibly compromised")
         lo = (snap.get("large_objects") or [{}])[0]
         if int(lo.get("count") or 0):
             self.flag("dbh.08", f"{lo['count']} large object(s) exist ({lo.get('superuser_owned', 0)} owned by a superuser): attackers stage binaries "
@@ -709,9 +722,10 @@ class PostgresAudit(Audit):
         for f in snap.get("function_grants", []):
             who = f.get("grantee")
             hit = who == "PUBLIC" or who in self.app_roles or who in self.via
-            self.flag("dbh.08", f"{'PUBLIC' if who == 'PUBLIC' else f'Role `{who}`'} can execute `{f['name']}()` (server file, large-object "
+            sig = f.get("signature")   # snapshots before 0.7.2 have only the name
+            self.flag("dbh.08", f"{'PUBLIC' if who == 'PUBLIC' else f'Role `{who}`'} can execute `{sig or f['name'] + '()'}` (server file, large-object "
                                 "or admin function; superuser only by default)", severity="error" if hit else "warn",
-                      fix_hint=f"REVOKE EXECUTE ON FUNCTION pg_catalog.{f['name']}(<each overload's argument types>) FROM {who}")
+                      fix_hint=f"REVOKE EXECUTE ON FUNCTION pg_catalog.{sig or f['name'] + '(<each overload argument types>)'} FROM {who}")
         for g in snap.get("parameter_grants", []):
             who, param = g.get("grantee"), g.get("parameter") or ""
             runs_code = bool(re.search(r"_command$|librar", param))   # archive/restore_command, *_preload_libraries, dynamic_library_path

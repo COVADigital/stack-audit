@@ -248,17 +248,18 @@ Tested with Claude Opus 5.5:
 - **`owasp-security`:** answers passed 8 of 8 checks with the skill and 4 of 8 without. Without it, the model missed that OWASP has a webhook cheat sheet and quoted a requirement number from memory.
 - **`web-standards` and `container-standards`:** answers passed every check with the skills, and the model alone also passed every check, including on a 63-file project and a 12-service stack. Their practical value is the audit scripts: fast, repeatable, and free to run.
 
-The test cases are in `skills/<name>/evals/`.
+The test cases are in `evals/`, and each skill's trigger questions are in `skills/<name>/evals/trigger-queries.json`.
 
 ## Repository layout
 
 ```text
 .claude-plugin/              plugin and marketplace manifests
 assets/                      banner, icon and social preview images
+evals/                       eval cases for `claude plugin eval` (prompt, graders, fixture files)
 hooks/                       SessionStart hook (when to load each skill, cheat sheet checks) and the edit hook
 lib/wclib/                   shared Python library (stdlib only), used by all skills
 scripts/                     shared CLIs (stack_profile.py)
-skills/<name>/               SKILL.md, references/, scripts/, assets/, evals/
+skills/<name>/               SKILL.md, references/, scripts/, assets/, evals/trigger-queries.json
 tests/                       unittest suite
 ```
 

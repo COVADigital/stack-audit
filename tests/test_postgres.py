@@ -70,6 +70,7 @@ def clean() -> dict:
         "subscriptions": [],
         "large_objects": [{"count": 0, "superuser_owned": 0}],
         "cascades": [],
+        "event_triggers": [],
     }
 
 
@@ -146,7 +147,11 @@ def bad() -> dict:
     s["databases"] += [{"database": "app", "grantee": "PUBLIC", "privilege": "CONNECT"},
                        {"database": "crm", "grantee": "PUBLIC", "privilege": "CONNECT"},
                        {"database": "app", "grantee": "db_owner", "privilege": "CREATE"}]
-    s["function_grants"] = [{"name": "pg_read_file", "grantee": "PUBLIC"}, {"name": "lo_export", "grantee": "reporting"}]
+    # lo_export has no signature: snapshots from before 0.7.2 have only the name
+    s["function_grants"] = [{"name": "pg_read_file", "signature": "pg_read_file(text)", "grantee": "PUBLIC"},
+                            {"name": "lo_export", "grantee": "reporting"}]
+    s["event_triggers"] = [{"name": "watch", "event": "ddl_command_end", "owner": "postgres", "enabled": True, "function": "public.evt()"},
+                           {"name": "old", "event": "sql_drop", "owner": "postgres", "enabled": False, "function": "public.evt2()"}]
     s["default_acls"] = [{"role": "db_owner", "schema": "public", "objtype": "r", "grantee": "PUBLIC", "privilege": "SELECT"},
                          {"role": "db_owner", "schema": "*", "objtype": "f", "grantee": "PUBLIC", "privilege": "EXECUTE"}]
     s["settings"].append({"name": "lo_compat_privileges", "setting": "on", "source": "configuration file"})
@@ -216,7 +221,8 @@ class PostgresLiveTests(TempRepo):
                      "App role `app_user` is a member of `db_owner` (owns 3 table(s))",
                      "Role `db_owner` (app role `app_user` is a member) is a member of `pg_write_all_data`",
                      "Role `db_owner` (app role `app_user` is a member) has CREATE on database `app`",
-                     "PUBLIC can connect to database(s) app, crm", "PUBLIC can execute `pg_read_file()`", "Role `reporting` can execute `lo_export()`",
+                     "PUBLIC can connect to database(s) app, crm", "PUBLIC can execute `pg_read_file(text)`", "Role `reporting` can execute `lo_export()`",
+                     "Event trigger `watch` (owner `postgres`) runs `public.evt()` on every `ddl_command_end`, including",
                      "grant SELECT on future tables in schema `public` to PUBLIC", "lo_compat_privileges is on",
                      "has WITH CHECK (true)", "`public.lookup2` pins search_path `public, pg_temp` but includes schema public",
                      "1 table(s) are owned by superuser `postgres`", "passport_number",
@@ -225,10 +231,32 @@ class PostgresLiveTests(TempRepo):
         self.assertNotIn("future functions", msgs)   # PUBLIC EXECUTE on functions is the built-in default
         self.assertTrue(any("crm not checked" in n for n in data["not_checked"]))
         sev = {f["message"].split(":")[0]: f["severity"] for f in data["findings"]}
-        self.assertEqual(sev["PUBLIC can execute `pg_read_file()` (server file, large-object or admin function; superuser only by default)"], "error")
+        self.assertEqual(sev["PUBLIC can execute `pg_read_file(text)` (server file, large-object or admin function; superuser only by default)"], "error")
         self.assertEqual(sev["Role `reporting` can execute `lo_export()` (server file, large-object or admin function; superuser only by default)"], "warn")
         self.assertEqual(sev["Role `ops` has ALTER SYSTEM on parameter `archive_command`"], "error")
         self.assertEqual(sev["Role `reporting` has SET on parameter `log_statement` (superuser-only by default)"], "warn")
+        hints = {f["message"].split(" (")[0]: f.get("fix_hint") for f in data["findings"]}
+        self.assertEqual(hints["PUBLIC can execute `pg_read_file(text)`"], "REVOKE EXECUTE ON FUNCTION pg_catalog.pg_read_file(text) FROM PUBLIC")
+        self.assertIn("pg_catalog.lo_export(<each overload argument types>)", hints["Role `reporting` can execute `lo_export()`"])
+        self.assertTrue(any(f["severity"] == "info" and "Event trigger `old`" in f["message"] and "(disabled)" in f["message"]
+                            for f in data["findings"]))
+        self.assertIn("it can SET ROLE db_owner", msgs)
+
+    def test_admin_only_membership_wording(self):
+        s = bad()
+        for m in s["memberships"]:
+            if m["granted"] == "db_owner":
+                m["admin_only"] = True
+        msgs = " | ".join(f["message"] for f in self.report(s, "--app-role", "app_user")["findings"])
+        self.assertIn("App role `app_user` is a member of `db_owner` (owns 3 table(s)): it holds only ADMIN OPTION, "
+                      "but it can grant itself SET and then SET ROLE db_owner", msgs)
+
+    def test_old_snapshot_without_event_triggers_is_not_checked(self):
+        s = clean()
+        del s["event_triggers"]
+        data = self.report(s, "--app-role", "app_user")
+        self.assertEqual(data["findings"], [])
+        self.assertTrue(any("dbh.08 event triggers" in n for n in data["not_checked"]))
 
     def test_postgres_maintenance_database_skipped_unless_snapshotted(self):
         s = clean()
